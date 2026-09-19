@@ -1,0 +1,40 @@
+# ========== 构建输出产物（必须忽略）==========
+build/
+out/
+*.class
+*.jar
+!src/main/resources/*.jar
+ChunkMap/
+
+# ========== Gradle相关缓存与本地下载包 ==========
+.gradle/
+gradle-dist/
+gradle-user-home/
+*.zip
+!gradle/wrapper/gradle-wrapper.zip
+
+# ========== 你的Server服务端、JDK环境文件夹 ==========
+Server/
+
+# ========== 日志文件 ==========
+*.log
+*.out
+
+# ========== IDE：VSCode ==========
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+
+# ========== IDE：IDEA / JetBrains ==========
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# ========== Trae IDE ==========
+.trae/
+
+# ========== 系统杂项 ==========
+.DS_Store
+Thumbs.db

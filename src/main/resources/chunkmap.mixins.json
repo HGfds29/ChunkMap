@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "com.geek.chunkmap.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ClientLevelMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
