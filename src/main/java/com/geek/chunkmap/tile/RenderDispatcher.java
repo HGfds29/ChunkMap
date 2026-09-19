@@ -25,7 +25,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class RenderDispatcher {
-    // config / storage 需要支持热替换，改为 volatile 非 final
     private volatile TileMapConfig config;
     private final FileLogger logger;
     private volatile TileStorage storage;
@@ -40,11 +39,10 @@ public class RenderDispatcher {
     private final AtomicLong renderedCount = new AtomicLong();
     private final AtomicLong failedCount = new AtomicLong();
 
-    /** 每次重建线程池自增，旧线程看到 gen 不匹配就会自然退出。 */
     private final AtomicLong workerGen = new AtomicLong();
 
     private volatile ExecutorService workers;
-    private final ExecutorService ioExecutor;   // 单线程 IO：所有 PNG 写盘都排队到这里
+    private final ExecutorService ioExecutor;
     private volatile ResourceKey<Level> currentDimension;
     private volatile boolean running = false;
 
@@ -63,11 +61,6 @@ public class RenderDispatcher {
         });
     }
 
-    /**
-     * 热替换配置。
-     * - outputDir 变化 → 重建 storage
-     * - renderThreads 变化 → 重建线程池（旧线程自然退出）
-     */
     public void updateConfig(TileMapConfig newConfig) {
         boolean outputChanged = !this.config.outputDir().equals(newConfig.outputDir());
         int oldThreads = this.config.renderThreads();
@@ -145,7 +138,6 @@ public class RenderDispatcher {
         logger.info("[Dispatcher] 启动, 工作线程数=" + n);
     }
 
-    /** 运行时重建工作线程池：旧线程在下一轮循环检测到 gen 变化后自然退出。 */
     private void restartWorkers(int n) {
         ExecutorService old = this.workers;
         long gen = workerGen.incrementAndGet();
@@ -211,7 +203,6 @@ public class RenderDispatcher {
             int[] pixels = r.renderChunk(snap);
             cache.put(snap.dim(), snap.pos(), pixels);
 
-            // 注意：这里读取的 config / storage 都是 volatile，重载后自动生效
             final int res = config.tileResolution();
             final TileStorage st = this.storage;
             final Path out = st.tilePath(snap.dim(), snap.pos());

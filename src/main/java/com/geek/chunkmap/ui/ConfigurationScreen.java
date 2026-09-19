@@ -11,13 +11,6 @@ import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-/**
- * 基于 Cloth Config 的配置界面。
- *
- * 打开方式：
- *   1. Alt + M 快捷键（在 ClientEventHandler 中注册）
- *   2. Mod Menu 模组列表 → ChunkMap → 配置按钮
- */
 public class ConfigurationScreen implements ModMenuApi {
 
     @Override
@@ -40,7 +33,6 @@ public class ConfigurationScreen implements ModMenuApi {
         ConfigCategory general = builder.getOrCreateCategory(
                 Component.translatable("chunkmap.config.category.general"));
 
-        // 关键：改成枚举选择器，只有 16×16 / 32×32 / 64×64 三档
         general.addEntry(e.startEnumSelector(
                         Component.translatable("chunkmap.config.tileResolution"),
                         TileMapConfig.Resolution.class,
@@ -91,6 +83,21 @@ public class ConfigurationScreen implements ModMenuApi {
                 .setSaveConsumer(v -> holder.deleteOnUnload = v)
                 .build());
 
+        // ---------- 反馈 ----------
+        ConfigCategory feedback = builder.getOrCreateCategory(
+                Component.translatable("chunkmap.config.category.feedback"));
+
+        feedback.addEntry(e.startStrField(
+                        Component.translatable("chunkmap.config.githubToken"),
+                        current.githubToken())
+                .setDefaultValue("")
+                .setTooltip(Component.translatable("chunkmap.config.githubToken.tooltip"))
+                .setSaveConsumer(v -> holder.githubToken = v)
+                .build());
+
+        feedback.addEntry(e.startTextDescription(
+                Component.translatable("chunkmap.config.githubToken.hint")).build());
+
         // ---------- 性能 ----------
         ConfigCategory perf = builder.getOrCreateCategory(
                 Component.translatable("chunkmap.config.category.performance"));
@@ -129,7 +136,6 @@ public class ConfigurationScreen implements ModMenuApi {
         return builder.build();
     }
 
-    /** 可变配置持有对象，Cloth Config 的 setSaveConsumer 写入这里。 */
     private static class MutableConfig {
         int tileResolution;
         String outputDir;
@@ -139,6 +145,7 @@ public class ConfigurationScreen implements ModMenuApi {
         boolean deleteOnUnload;
         int renderThreads;
         int logRetentionDays;
+        String githubToken;
 
         MutableConfig(TileMapConfig c) {
             this.tileResolution = c.tileResolution();
@@ -149,12 +156,13 @@ public class ConfigurationScreen implements ModMenuApi {
             this.deleteOnUnload = c.deleteOnUnload();
             this.renderThreads = c.renderThreads();
             this.logRetentionDays = c.logRetentionDays();
+            this.githubToken = c.githubToken();
         }
 
         TileMapConfig toRecord() {
             return new TileMapConfig(tileResolution, outputDir, colorMode,
                     shadeByHeight, uiAnimation, deleteOnUnload,
-                    renderThreads, logRetentionDays);
+                    renderThreads, logRetentionDays, githubToken);
         }
     }
 }

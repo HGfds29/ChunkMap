@@ -55,7 +55,6 @@ public class ChunkMapScreen extends Screen {
     private static final int C_TOAST_OK   = 0xFF7EE787;
     private static final int C_TOAST_ERR  = 0xFFFF7B72;
 
-    /** 金色 Star 按钮配色。 */
     private static final int C_STAR       = 0xFFD4A017;
     private static final int C_STAR_HI    = 0xFFFFE082;
 
@@ -69,7 +68,6 @@ public class ChunkMapScreen extends Screen {
     private final TileMapCache cache;
     private final FileLogger logger;
 
-    // 动态字段：重载配置后会自动同步
     private int tileRes = 32;
     private int lastTileRes = -1;
 
@@ -97,11 +95,10 @@ public class ChunkMapScreen extends Screen {
     private boolean exportSuccess = false;
     private boolean exporting = false;
 
-    /** R 键触发的重载标记：下一帧 render 开头执行，避免在 keyPressed 里递归换屏幕。 */
     private boolean pendingReload = false;
 
     private final List<Btn> buttons = new ArrayList<>();
-    private Btn btnExport, btnCenter, btnReset, btnClose, btnFeedback, btnStar;
+    private Btn btnExport, btnClose, btnFeedback, btnLogs, btnStar;
 
     private long openTime = 0;
 
@@ -113,8 +110,6 @@ public class ChunkMapScreen extends Screen {
 
     @Override
     public boolean isPauseScreen() { return false; }
-
-    // ---------- 动态读取配置 ----------
 
     private static int currentTileRes() {
         var c = ChunkMapMod.getConfig();
@@ -152,7 +147,7 @@ public class ChunkMapScreen extends Screen {
         layoutButtons();
 
         if (logger != null) {
-            logger.info("[UI] 打开 screen=" + width + "x" + height
+            logger.info("[UI] 打开 map screen=" + width + "x" + height
                     + " tileRes=" + tileRes + " radius=" + radius + " uiAnim=" + uiAnim);
         }
     }
@@ -165,33 +160,20 @@ public class ChunkMapScreen extends Screen {
         btnClose = new Btn(x - 22, y, 22, BTN_H, "X", this::onClose, false);
         x -= 22 + 4;
 
-        btnReset = new Btn(x - 24, y, 24, BTN_H, "1:1", () -> {
-            zoom = 1.0;
-            offsetX = 0;
-            offsetZ = 0;
-            zoomToastUntil = System.currentTimeMillis() + 900;
-        }, false);
-        x -= 24 + 4;
-
-        btnCenter = new Btn(x - 60, y, 60, BTN_H, "回到玩家", () -> {
-            offsetX = 0;
-            offsetZ = 0;
-        }, false);
-        x -= 60 + 4;
-
         btnExport = new Btn(x - 44, y, 44, BTN_H, "导出", this::exportStitchedMap, false);
+        x -= 44 + 4;
+
+        btnLogs = new Btn(x - 44, y, 44, BTN_H, "日志", this::openLogs, false);
         x -= 44 + 4;
 
         btnFeedback = new Btn(x - 44, y, 44, BTN_H, "反馈", this::openFeedback, false);
         x -= 44 + 4;
 
         btnStar = new Btn(x - 62, y, 62, BTN_H, "★ Star", this::openStarPage, true);
-        x -= 62 + 4;
 
         buttons.add(btnClose);
-        buttons.add(btnReset);
-        buttons.add(btnCenter);
         buttons.add(btnExport);
+        buttons.add(btnLogs);
         buttons.add(btnFeedback);
         buttons.add(btnStar);
     }
@@ -200,28 +182,68 @@ public class ChunkMapScreen extends Screen {
         minecraft.setScreen(new FeedbackScreen(this));
     }
 
+    private void openLogs() {
+        minecraft.setScreen(new LogViewerScreen(this));
+    }
+
     private void openStarPage() {
-        try {
-            java.awt.Desktop.getDesktop().browse(java.net.URI.create(ChunkMapMod.GITHUB_URL));
-            showExportMsg("已在浏览器打开 GitHub，感谢 Star ⭐", true);
-            if (logger != null) logger.info("[UI] 打开 Star 页面: " + ChunkMapMod.GITHUB_URL);
-        } catch (Throwable t) {
-            showExportMsg("请手动打开: " + ChunkMapMod.GITHUB_URL, false);
-            if (logger != null) logger.warn("[UI] 打开 Star 页面失败: " + t.getMessage());
+        openUrl(ChunkMapMod.GITHUB_URL, "已打开 GitHub，感谢 Star ⭐");
+    }
+
+    private void openUrl(String url, String okMsg) {
+        boolean ok = openUri(url);
+        if (ok) {
+            showExportMsg(okMsg, true);
+            if (logger != null) logger.info("[UI] 打开 URL: " + url);
+        } else {
+            minecraft.keyboardHandler.setClipboard(url);
+            showExportMsg("已复制链接到剪贴板: " + url, false);
+            if (logger != null) logger.warn("[UI] 打开 URL 失败，已复制到剪贴板: " + url);
         }
     }
 
-    // ---------- 渲染 ----------
+    /**
+     * 打开外部 URL。依次尝试 net.minecraft.Util / net.minecraft.util.Util（不同 MC 版本包路径不同），
+     * 都失败则回退到 java.awt.Desktop。返回是否成功。
+     */
+    private static boolean openUri(String url) {
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            for (String cn : new String[]{
+                    "net.minecraft.Util",
+                    "net.minecraft.util.Util"
+            }) {
+                try {
+                    Class<?> cls = Class.forName(cn);
+                    Object platform = cls.getMethod("getPlatform").invoke(null);
+                    platform.getClass()
+                            .getMethod("openUri", java.net.URI.class)
+                            .invoke(platform, uri);
+                    return true;
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
+
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            if (java.awt.Desktop.isDesktopSupported()
+                    && java.awt.Desktop.getDesktop()
+                            .isSupported(java.awt.Desktop.Action.BROWSE)) {
+                java.awt.Desktop.getDesktop().browse(uri);
+                return true;
+            }
+        } catch (Throwable ignored) {}
+
+        return false;
+    }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
-        // 延迟重载：在本帧开头执行一次，避免在 keyPressed 里递归触发
         if (pendingReload) {
             pendingReload = false;
             doReload();
         }
 
-        // 每帧同步 tileRes（用户可能刚重载过配置，改了 tileResolution）
         int curRes = currentTileRes();
         if (curRes != tileRes) {
             tileRes = curRes;
@@ -293,12 +315,6 @@ public class ChunkMapScreen extends Screen {
         }
     }
 
-    /**
-     * 精确的地图屏幕矩形（未取整），供 map body / grid / player marker 共用。
-     * 只要三者都用同一份数学，就不会再出现放大后网格与区块错位。
-     *
-     * @return {drawX, drawY, drawW, drawH}
-     */
     private double[] computeMapRect() {
         if (texSize <= 0) return new double[]{0, 0, 0, 0};
         double cx = width / 2.0 + offsetX;
@@ -313,8 +329,6 @@ public class ChunkMapScreen extends Screen {
         double[] r = computeMapRect();
 
         g.enableScissor(0, TOPBAR_H, width, height - BOTBAR_H);
-
-        // 地图背景用取整后的外扩矩形，避免边缘漏底
         int bgL = (int) Math.floor(r[0]);
         int bgT = (int) Math.floor(r[1]);
         int bgR = (int) Math.ceil(r[0] + r[2]);
@@ -323,15 +337,12 @@ public class ChunkMapScreen extends Screen {
 
         var pose = g.pose();
         pose.pushMatrix();
-        // 关键修复：使用未取整的原点 + scale，让纹理边界与网格数学一致
         pose.translate((float) r[0], (float) r[1]);
         pose.scale((float) zoom, (float) zoom);
 
         g.blit(RenderPipelines.GUI_TEXTURED, TEXTURE_ID,
-                0, 0,
-                0.0F, 0.0F,
-                texSize, texSize,
-                texSize, texSize);
+                0, 0, 0.0F, 0.0F,
+                texSize, texSize, texSize, texSize);
 
         pose.popMatrix();
         g.disableScissor();
@@ -340,7 +351,6 @@ public class ChunkMapScreen extends Screen {
     private void drawGrid(GuiGraphics g) {
         if (texture == null || texSize <= 0) return;
 
-        // 精确格宽（浮点），与纹理像素边界数学一致
         double cellF = tileRes * zoom;
         if (cellF < 4) return;
 
@@ -357,7 +367,6 @@ public class ChunkMapScreen extends Screen {
 
         g.enableScissor(left, top, right, bot);
 
-        // 竖线：位置 = drawX + i * cellF，i 精确推进，不累积整数误差
         int startI = (int) Math.floor((left - drawX) / cellF);
         int endI   = (int) Math.ceil((right - drawX) / cellF);
         for (int i = startI; i <= endI; i++) {
@@ -366,7 +375,6 @@ public class ChunkMapScreen extends Screen {
             g.fill(x, top, x + 1, bot, color);
         }
 
-        // 横线同理
         int startJ = (int) Math.floor((top - drawY) / cellF);
         int endJ   = (int) Math.ceil((bot - drawY) / cellF);
         for (int j = startJ; j <= endJ; j++) {
@@ -384,7 +392,6 @@ public class ChunkMapScreen extends Screen {
 
         double mapCx = r[0] + r[2] / 2.0;
         double mapCz = r[1] + r[3] / 2.0;
-        // 一个方块的屏幕宽度 = 一格 tile 宽度 / 16
         double pxPerBlock = r[2] / ((2 * radius + 1) * 16.0);
 
         double worldCx = chunk.x * 16 + 8;
@@ -454,7 +461,7 @@ public class ChunkMapScreen extends Screen {
             g.drawString(font, "队列 " + disp.queueSize(), tx, ty, withAlpha(C_TEXT_DIM, alpha), true);
         }
 
-        String hint = "滚轮缩放 · 拖拽平移 · E 导出 · C 回中 · R 重载 · ESC 关闭";
+        String hint = "滚轮缩放 · 拖拽平移 · E 导出 · C 回中 · Z 1:1 · R 重载 · ESC 关闭";
         g.drawString(font, hint, width - font.width(hint) - 10, ty, withAlpha(C_TEXT_DIM, alpha), true);
     }
 
@@ -552,8 +559,6 @@ public class ChunkMapScreen extends Screen {
         g.drawString(font, b.label, tx, ty, withAlpha(textCol, alpha), false);
     }
 
-    // ---------- 纹理重建 ----------
-
     private void rebuildTexture(long version, ResourceKey<Level> dim) {
         LocalPlayer player = minecraft.player;
         if (player == null) return;
@@ -596,8 +601,6 @@ public class ChunkMapScreen extends Screen {
             if (!handedOff) img.close();
         }
     }
-
-    // ---------- 交互 ----------
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double hAmount, double vAmount) {
@@ -651,14 +654,17 @@ public class ChunkMapScreen extends Screen {
         if (e.key() == InputConstants.KEY_ESCAPE) { onClose(); return true; }
         if (e.key() == InputConstants.KEY_E) { exportStitchedMap(); return true; }
         if (e.key() == InputConstants.KEY_C) { offsetX = 0; offsetZ = 0; return true; }
+        if (e.key() == InputConstants.KEY_Z) {
+            zoom = 1.0;
+            zoomToastUntil = System.currentTimeMillis() + 900;
+            return true;
+        }
         if (e.key() == InputConstants.KEY_R) {
             pendingReload = true;
             return true;
         }
         return super.keyPressed(e);
     }
-
-    // ---------- 重载 ----------
 
     private void doReload() {
         LocalPlayer player = minecraft.player;
@@ -669,7 +675,6 @@ public class ChunkMapScreen extends Screen {
 
         ChunkMapMod.reload();
 
-        // 重载后同步 tileRes；若变化则重算布局
         int newRes = currentTileRes();
         if (newRes != tileRes) {
             tileRes = newRes;
@@ -705,8 +710,6 @@ public class ChunkMapScreen extends Screen {
             logger.info("[UI] R 重载：" + count + " 区块入队，同步耗时=" + dt + "ms");
         }
     }
-
-    // ---------- 导出 ----------
 
     private void exportStitchedMap() {
         ClientLevel level = minecraft.level;
@@ -751,8 +754,6 @@ public class ChunkMapScreen extends Screen {
         exportSuccess = success;
     }
 
-    // ---------- 生命周期 ----------
-
     @Override
     public void onClose() { releaseTexture(); super.onClose(); }
 
@@ -787,8 +788,6 @@ public class ChunkMapScreen extends Screen {
         int a = (int) (((color >>> 24) & 0xFF) * Math.max(0f, Math.min(1f, alpha)));
         return (a << 24) | (color & 0xFFFFFF);
     }
-
-    // ---------- 按钮内部类 ----------
 
     private static class Btn {
         final int x, y, w, h;

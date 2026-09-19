@@ -2,43 +2,35 @@ package com.geek.chunkmap.ui;
 
 import com.geek.chunkmap.ChunkMapMod;
 import com.geek.chunkmap.util.FileLogger;
+import com.google.gson.Gson;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
-import java.awt.Desktop;
 import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Map;
 
-/**
- * 反馈 / 日志查看界面。
- *
- * 主要功能：
- *   - 读取当前日志文件，按 TRACE / DEBUG / INFO / WARN / ERROR 分级着色
- *   - "复制全部" 一键把日志塞进剪贴板
- *   - "打开 Issues" 直接跳 GitHub Issues 页（浏览器打开）
- *   - "打开目录" 在系统文件管理器里打开日志目录
- *
- * 快捷键：
- *   ESC        返回上一层
- *   R / F5     重新读取日志
- *   C          复制全部日志到剪贴板
- *   PgUp/PgDn、Home/End、滚轮  滚动
- */
 public class FeedbackScreen extends Screen {
 
-    private static final int TOPBAR_H  = 26;
-    private static final int BOTBAR_H  = 20;
-    private static final int LINE_H    = 10;
-    private static final int MAX_LINES = 5000;
+    private static final int TOPBAR_H = 30;
+    private static final int BOTBAR_H = 22;
+    private static final int BTN_H    = 18;
 
     private static final int C_BG         = 0xFF0F1216;
     private static final int C_BAR        = 0xE6101317;
@@ -51,28 +43,29 @@ public class FeedbackScreen extends Screen {
     private static final int C_BTN_HOVER  = 0xFF28323F;
     private static final int C_BTN_BORDER = 0xFF2A313B;
     private static final int C_BTN_BORDER_HOVER = 0xFF4A9EFF;
-    private static final int C_STAR       = 0xFFD4A017;
-    private static final int C_STAR_HI    = 0xFFFFE082;
+    private static final int C_OK         = 0xFF7EE787;
+    private static final int C_ERR        = 0xFFFF7B72;
 
-    // 日志级别配色
-    private static final int C_TRACE = 0xFF6E7681;
-    private static final int C_DEBUG = 0xFF8B949E;
-    private static final int C_INFO  = 0xFFC9D1D9;
-    private static final int C_WARN  = 0xFFE3B341;
-    private static final int C_ERROR = 0xFFFF7B72;
-    private static final int C_CONT  = 0xFF7A828C;   // 堆栈续行
+    private static final long STATUS_MS = 6000;
+    private static final long DAY_MS = 24L * 3600L * 1000L;
 
-    private static final Pattern LINE_PATTERN = Pattern.compile(
-            "^\\[(\\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\] \\[(TRACE|DEBUG|INFO|WARN|ERROR|OFF)\\] \\[([^\\]]+)\\] (.*)$"
-    );
+    private static final Path RATE_FILE = Path.of("config", "chunkmap-feedback.time");
+
+    private static final DateTimeFormatter TITLE_FMT =
+            DateTimeFormatter.ofPattern("MM-dd HH:mm");
+    private static final DateTimeFormatter FULL_FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final Screen parent;
-    private final List<LogEntry> lines = new ArrayList<>();
-    private final List<Btn> buttons = new ArrayList<>();
 
-    private int scroll = 0;
-    private boolean autoScroll = true;
+    private EditBox contentBox;
+    private final List<Btn> buttons = new ArrayList<>();
+    private Btn btnBack, btnCopy, btnIssues, btnSubmit;
+
     private String status = "";
+    private boolean statusOk = true;
+    private long statusUntil = 0;
+    private boolean submitting = false;
 
     public FeedbackScreen(Screen parent) {
         super(Component.literal("ChunkMap 反馈"));
@@ -84,162 +77,227 @@ public class FeedbackScreen extends Screen {
 
     @Override
     protected void init() {
-        reloadLog();
+        int boxW = Math.min(420, width - 60);
+        int boxX = (width - boxW) / 2;
+        int boxY = TOPBAR_H + 44;
+
+        contentBox = new EditBox(font, boxX, boxY, boxW, 20, Component.literal("反馈内容"));
+        contentBox.setMaxLength(2000);
+        contentBox.setHint(Component.literal("请输入反馈内容…"));
+        contentBox.setValue("");
+        contentBox.setFocused(true);
+
         layoutButtons();
     }
 
     private void layoutButtons() {
         buttons.clear();
-        int y = (TOPBAR_H - 16) / 2;
+        int y = (TOPBAR_H - BTN_H) / 2;
         int x = width - 8;
 
-        buttons.add(new Btn(x - 44, y, 44, 16, "返回", () -> minecraft.setScreen(parent), false));
+        btnBack = new Btn(x - 44, y, 44, BTN_H, "返回", () -> minecraft.setScreen(parent));
         x -= 44 + 4;
-        buttons.add(new Btn(x - 60, y, 60, 16, "打开目录", this::openLogFolder, false));
-        x -= 60 + 4;
-        buttons.add(new Btn(x - 60, y, 60, 16, "复制全部", this::copyAll, false));
-        x -= 60 + 4;
-        buttons.add(new Btn(x - 76, y, 76, 16, "前往 Issues", this::openIssues, false));
+
+        btnIssues = new Btn(x - 76, y, 76, BTN_H, "打开 Issues", this::openIssues);
         x -= 76 + 4;
-        buttons.add(new Btn(x - 44, y, 44, 16, "刷新", this::reloadLog, false));
+
+        btnCopy = new Btn(x - 60, y, 60, BTN_H, "复制内容", this::copyContent);
+        x -= 60 + 4;
+
+        btnSubmit = new Btn(x - 60, y, 60, BTN_H, "提交反馈", this::submitToGitHub);
+
+        buttons.add(btnBack);
+        buttons.add(btnIssues);
+        buttons.add(btnCopy);
+        buttons.add(btnSubmit);
     }
 
-    // ---------- 日志读取 ----------
+    private void submitToGitHub() {
+        if (submitting) return;
 
-    private void reloadLog() {
-        lines.clear();
-        FileLogger logger = ChunkMapMod.getLogger();
-        Path path = logger != null ? logger.getCurrentLogFile() : null;
-        if (path == null || !Files.exists(path)) {
-            status = "暂无日志文件";
-            autoScroll = true;
+        String content = contentBox.getValue();
+        if (content == null || content.isBlank()) {
+            setStatus("请先输入反馈内容", false);
             return;
         }
-        try {
-            List<String> raw = Files.readAllLines(path);
-            int from = Math.max(0, raw.size() - MAX_LINES);
-            FileLogger.Level last = FileLogger.Level.INFO;
-            for (int i = from; i < raw.size(); i++) {
-                String line = raw.get(i);
-                Matcher m = LINE_PATTERN.matcher(line);
-                if (m.matches()) {
-                    FileLogger.Level lv;
-                    try { lv = FileLogger.Level.valueOf(m.group(2)); }
-                    catch (Throwable t) { lv = FileLogger.Level.INFO; }
-                    last = lv;
-                    lines.add(new LogEntry(lv, m.group(1), m.group(3), m.group(4), false));
-                } else {
-                    lines.add(new LogEntry(last, null, null, line, true));
+
+        if (!canSubmitToday()) {
+            long remain = DAY_MS - (System.currentTimeMillis() - lastSubmitTime());
+            setStatus("今日已提交过反馈，请 " + formatDuration(remain) + " 后再试", false);
+            return;
+        }
+
+        String token = ChunkMapMod.getEffectiveToken();
+        if (token.isBlank()) {
+            setStatus("未配置 GitHub Token，或点击\"打开 Issues\"手动提交", false);
+            return;
+        }
+
+        submitting = true;
+        setStatus("正在提交…", true);
+
+        final String playerName = minecraft.getUser().getName();
+        final String title = "[反馈] " + playerName + " @ " + LocalDateTime.now().format(TITLE_FMT);
+        final String body = content + "\n\n---\n"
+                + "**版本**: " + ChunkMapMod.VERSION + "\n"
+                + "**玩家**: " + playerName + "\n"
+                + "**时间**: " + LocalDateTime.now().format(FULL_FMT) + "\n"
+                + "\n<details><summary>最近 50 行日志</summary>\n\n```\n"
+                + tailLog(50) + "\n```\n</details>";
+
+        Thread t = new Thread(() -> {
+            String result = postIssue(token, title, body);
+            minecraft.execute(() -> {
+                submitting = false;
+                boolean ok = result.startsWith("✅");
+                setStatus(result, ok);
+                if (ok) {
+                    recordSubmit();
+                    contentBox.setValue("");
                 }
-            }
-            status = "共 " + raw.size() + " 行 · 显示最后 " + lines.size() + " 行";
-            autoScroll = true;
-        } catch (IOException e) {
-            status = "读取失败: " + e.getMessage();
-        }
+            });
+        }, "ChunkMap-Feedback");
+        t.setDaemon(true);
+        t.start();
     }
 
-    private void openLogFolder() {
+    private static String postIssue(String token, String title, String body) {
         try {
-            FileLogger logger = ChunkMapMod.getLogger();
-            Path p = logger != null ? logger.getCurrentLogFile() : null;
-            Path dir = (p != null ? p.getParent() : Path.of("logs", "chunkmap"));
-            Files.createDirectories(dir);
-            if (Desktop.isDesktopSupported()) {
-                Desktop.getDesktop().open(dir.toFile());
-                status = "已打开目录: " + dir.toAbsolutePath();
-            } else {
-                status = "路径: " + dir.toAbsolutePath();
-            }
-        } catch (Exception e) {
-            status = "打开失败: " + e.getMessage();
-        }
-    }
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(15))
+                    .build();
 
-    private void copyAll() {
-        try {
-            StringBuilder sb = new StringBuilder();
-            sb.append("=== ChunkMap 反馈 ===\n");
-            sb.append("版本: ").append(ChunkMapMod.VERSION).append('\n');
-            sb.append("仓库: ").append(ChunkMapMod.GITHUB_URL).append('\n');
-            sb.append("--------------------------------\n");
-            for (LogEntry e : lines) sb.append(formatEntry(e)).append('\n');
-            minecraft.keyboardHandler.setClipboard(sb.toString());
-            status = "已复制 " + lines.size() + " 行到剪贴板，粘贴到 Issues 即可";
+            String json = new Gson().toJson(Map.of("title", title, "body", body));
+
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(ChunkMapMod.GITHUB_API_ISSUES))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github+json")
+                    .header("Content-Type", "application/json")
+                    .header("User-Agent", "ChunkMap-Mod/" + ChunkMapMod.VERSION)
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+
+            HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+            return switch (resp.statusCode()) {
+                case 201 -> "✅ 提交成功，感谢反馈！";
+                case 401 -> "❌ Token 无效或已过期";
+                case 403 -> "❌ Token 权限不足 / 已达频率限制";
+                case 404 -> "❌ 仓库不存在（Token 无权访问）";
+                case 422 -> "❌ 内容格式不合法";
+                default  -> "❌ 提交失败 HTTP " + resp.statusCode();
+            };
         } catch (Throwable t) {
-            status = "复制失败: " + t.getMessage();
+            return "❌ 提交失败: " + t.getMessage();
         }
+    }
+
+    private static long lastSubmitTime() {
+        try {
+            if (!Files.exists(RATE_FILE)) return 0L;
+            return Long.parseLong(Files.readString(RATE_FILE).trim());
+        } catch (Throwable t) {
+            return 0L;
+        }
+    }
+
+    private static boolean canSubmitToday() {
+        return System.currentTimeMillis() - lastSubmitTime() >= DAY_MS;
+    }
+
+    private static void recordSubmit() {
+        try {
+            Files.createDirectories(RATE_FILE.getParent());
+            Files.writeString(RATE_FILE, String.valueOf(System.currentTimeMillis()));
+        } catch (IOException ignored) {}
+    }
+
+    private static String formatDuration(long ms) {
+        if (ms <= 0) return "一会儿";
+        long totalMin = ms / 60000;
+        long h = totalMin / 60;
+        long m = totalMin % 60;
+        if (h > 0) return h + " 小时 " + m + " 分钟";
+        return Math.max(1, m) + " 分钟";
+    }
+
+    private void copyContent() {
+        String content = contentBox.getValue();
+        if (content == null || content.isBlank()) {
+            setStatus("请先输入反馈内容", false);
+            return;
+        }
+        String playerName = minecraft.getUser().getName();
+        String full = content + "\n\n---\n"
+                + "**版本**: " + ChunkMapMod.VERSION + "\n"
+                + "**玩家**: " + playerName + "\n"
+                + "**时间**: " + LocalDateTime.now().format(FULL_FMT) + "\n"
+                + "\n```\n" + tailLog(50) + "\n```\n";
+        minecraft.keyboardHandler.setClipboard(full);
+        setStatus("已复制到剪贴板，粘贴到 Issues 即可", true);
     }
 
     private void openIssues() {
-        try {
-            java.awt.Desktop.getDesktop().browse(
-                    java.net.URI.create(ChunkMapMod.GITHUB_ISSUES_URL));
-            // 顺带把日志复制到剪贴板，方便用户粘贴
-            StringBuilder sb = new StringBuilder();
-            sb.append("=== ChunkMap 反馈 ===\n");
-            sb.append("版本: ").append(ChunkMapMod.VERSION).append('\n');
-            sb.append("--------------------------------\n");
-            for (LogEntry e : lines) sb.append(formatEntry(e)).append('\n');
-            minecraft.keyboardHandler.setClipboard(sb.toString());
-            status = "已打开 Issues 页，日志已复制到剪贴板";
-        } catch (Throwable t) {
-            status = "打开失败: " + ChunkMapMod.GITHUB_ISSUES_URL;
+        copyContent();
+        boolean ok = openUri(ChunkMapMod.GITHUB_ISSUES_URL);
+        if (ok) {
+            setStatus("已打开 Issues 页，内容已复制到剪贴板", true);
+        } else {
+            minecraft.keyboardHandler.setClipboard(ChunkMapMod.GITHUB_ISSUES_URL);
+            setStatus("打开失败，链接已复制到剪贴板", false);
         }
     }
 
-    private static String formatEntry(LogEntry e) {
-        if (e.continuation()) return e.text();
-        return "[" + e.time() + "] [" + e.level() + "] [" + e.thread() + "] " + e.text();
+    private static String tailLog(int maxLines) {
+        FileLogger logger = ChunkMapMod.getLogger();
+        Path p = logger != null ? logger.getCurrentLogFile() : null;
+        if (p == null || !Files.exists(p)) return "(无日志)";
+        try {
+            List<String> all = Files.readAllLines(p);
+            int from = Math.max(0, all.size() - maxLines);
+            return String.join("\n", all.subList(from, all.size()));
+        } catch (IOException e) {
+            return "(读取日志失败: " + e.getMessage() + ")";
+        }
     }
 
-    // ---------- 渲染 ----------
+    private void setStatus(String msg, boolean ok) {
+        this.status = msg;
+        this.statusOk = ok;
+        this.statusUntil = System.currentTimeMillis() + STATUS_MS;
+    }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
         g.fill(0, 0, width, height, C_BG);
 
-        int areaTop   = TOPBAR_H + 2;
-        int areaBot   = height - BOTBAR_H - 2;
-        int areaLeft  = 4;
-        int areaRight = width - 6;
+        int boxW = Math.min(420, width - 60);
+        int boxX = (width - boxW) / 2;
+        g.drawString(font, "请输入反馈内容（提交时自动附上版本号、玩家名和最后 50 行日志）：",
+                boxX, TOPBAR_H + 24, C_TEXT_DIM, false);
 
-        int visible   = Math.max(1, (areaBot - areaTop) / LINE_H);
-        int maxScroll = Math.max(0, lines.size() - visible);
-        if (autoScroll) scroll = maxScroll;
-        else scroll = Math.max(0, Math.min(scroll, maxScroll));
-
-        g.enableScissor(areaLeft, areaTop, areaRight, areaBot);
-        int y = areaTop;
-        for (int i = scroll; i < lines.size(); i++) {
-            if (y + LINE_H > areaBot) break;
-            LogEntry e = lines.get(i);
-            int color = colorOf(e.level(), e.continuation());
-            g.drawString(font, formatEntry(e), areaLeft + 2, y, color, false);
-            y += LINE_H;
-        }
-        g.disableScissor();
-
-        // 滚动条
-        if (maxScroll > 0) {
-            int barX = width - 4;
-            int trackH = areaBot - areaTop;
-            int thumbH = Math.max(20, trackH * visible / Math.max(1, lines.size()));
-            int thumbY = areaTop + (int) ((trackH - thumbH) * (scroll / (double) maxScroll));
-            g.fill(barX, areaTop, barX + 2, areaBot, 0x30FFFFFF);
-            g.fill(barX, thumbY, barX + 2, thumbY + thumbH, 0x90FFFFFF);
+        if (!canSubmitToday()) {
+            long remain = DAY_MS - (System.currentTimeMillis() - lastSubmitTime());
+            g.drawString(font, "今日已提交过，还需 " + formatDuration(remain) + " 才能再次提交",
+                    boxX, TOPBAR_H + 76, C_TEXT_DIM, false);
+        } else if (ChunkMapMod.getEffectiveToken().isBlank()) {
+            g.drawString(font, "未配置 GitHub Token → 可用「复制内容」+「打开 Issues」手动提交",
+                    boxX, TOPBAR_H + 76, C_TEXT_DIM, false);
         }
 
-        drawTopBar(g, mouseX, mouseY);
+        contentBox.render(g, mouseX, mouseY, delta);
+
+        drawTopBar(g);
         drawBottomBar(g);
-    }
-
-    private void drawTopBar(GuiGraphics g, int mouseX, int mouseY) {
-        g.fill(0, 0, width, TOPBAR_H, C_BAR);
-        g.fill(0, TOPBAR_H - 1, width, TOPBAR_H, C_BAR_LINE);
-        g.drawString(font, "ChunkMap 反馈 / 日志", 10, (TOPBAR_H - 8) / 2, C_TEXT, true);
 
         for (Btn b : buttons) drawButton(g, b, b.contains(mouseX, mouseY));
+    }
+
+    private void drawTopBar(GuiGraphics g) {
+        g.fill(0, 0, width, TOPBAR_H, C_BAR);
+        g.fill(0, TOPBAR_H - 1, width, TOPBAR_H, C_BAR_LINE);
+        g.drawString(font, "ChunkMap 反馈", 10, (TOPBAR_H - 8) / 2, C_TEXT, true);
     }
 
     private void drawBottomBar(GuiGraphics g) {
@@ -248,8 +306,14 @@ public class FeedbackScreen extends Screen {
         g.fill(0, y, width, y + 1, C_BAR_LINE);
 
         int ty = y + (BOTBAR_H - 8) / 2;
-        g.drawString(font, status, 10, ty, C_TEXT_DIM, true);
-        String hint = "滚轮滚动 · R 刷新 · C 复制 · ESC 返回";
+
+        if (status.isEmpty() || System.currentTimeMillis() > statusUntil) {
+            g.drawString(font, "回车提交 · ESC 返回", 10, ty, C_TEXT_DIM, true);
+        } else {
+            g.drawString(font, status, 10, ty, statusOk ? C_OK : C_ERR, true);
+        }
+
+        String hint = "版本 " + ChunkMapMod.VERSION;
         g.drawString(font, hint, width - font.width(hint) - 10, ty, C_TEXT_DIM, true);
     }
 
@@ -257,12 +321,8 @@ public class FeedbackScreen extends Screen {
         b.tick(hovered);
         float h = b.hover;
         int bg      = lerpColor(C_BTN_BG, C_BTN_HOVER, h);
-        int border  = b.star
-                ? lerpColor(C_STAR, C_STAR_HI, h)
-                : lerpColor(C_BTN_BORDER, C_BTN_BORDER_HOVER, h);
-        int textCol = b.star
-                ? lerpColor(C_STAR, C_STAR_HI, h)
-                : lerpColor(C_TEXT_DIM, C_TEXT, h);
+        int border  = lerpColor(C_BTN_BORDER, C_BTN_BORDER_HOVER, h);
+        int textCol = lerpColor(C_TEXT_DIM, C_TEXT, h);
 
         g.fill(b.x, b.y, b.x + b.w, b.y + b.h, bg);
         g.fill(b.x, b.y, b.x + b.w, b.y + 1, border);
@@ -270,67 +330,75 @@ public class FeedbackScreen extends Screen {
         g.fill(b.x, b.y, b.x + 1, b.y + b.h, border);
         g.fill(b.x + b.w - 1, b.y, b.x + b.w, b.y + b.h, border);
         if (h > 0.01f) {
-            int accent = b.star
-                    ? lerpColor(C_STAR, C_STAR_HI, h)
-                    : lerpColor(C_ACCENT, C_ACCENT_HI, h);
-            g.fill(b.x + 1, b.y + 1, b.x + b.w - 1, b.y + 2, accent);
+            g.fill(b.x + 1, b.y + 1, b.x + b.w - 1, b.y + 2,
+                    lerpColor(C_ACCENT, C_ACCENT_HI, h));
         }
 
         int tw = font.width(b.label);
         g.drawString(font, b.label, b.x + (b.w - tw) / 2, b.y + (b.h - 8) / 2, textCol, false);
     }
 
-    // ---------- 交互 ----------
-
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double hAmount, double vAmount) {
-        if (vAmount == 0) return super.mouseScrolled(mouseX, mouseY, hAmount, vAmount);
-        int delta = (int) -Math.signum(vAmount) * 3;
-
-        int areaTop = TOPBAR_H + 2;
-        int areaBot = height - BOTBAR_H - 2;
-        int visible = Math.max(1, (areaBot - areaTop) / LINE_H);
-        int maxScroll = Math.max(0, lines.size() - visible);
-
-        scroll = Math.max(0, Math.min(maxScroll, scroll + delta));
-        autoScroll = scroll >= maxScroll;
-        return true;
+    public boolean mouseClicked(MouseButtonEvent event, boolean bl) {
+        for (Btn b : buttons) {
+            if (b.contains(event.x(), event.y())) {
+                b.action.run();
+                return true;
+            }
+        }
+        if (contentBox.mouseClicked(event, bl)) return true;
+        return super.mouseClicked(event, bl);
     }
 
     @Override
     public boolean keyPressed(KeyEvent e) {
-        if (e.key() == InputConstants.KEY_ESCAPE) { minecraft.setScreen(parent); return true; }
-        if (e.key() == InputConstants.KEY_R || e.key() == InputConstants.KEY_F5) {
-            reloadLog(); return true;
+        if (e.key() == InputConstants.KEY_ESCAPE) {
+            minecraft.setScreen(parent);
+            return true;
         }
-        if (e.key() == InputConstants.KEY_C) { copyAll(); return true; }
-        if (e.key() == InputConstants.KEY_PAGEUP)   { scroll = Math.max(0, scroll - 10); autoScroll = false; return true; }
-        if (e.key() == InputConstants.KEY_PAGEDOWN) { scroll += 10; autoScroll = false; return true; }
-        if (e.key() == InputConstants.KEY_HOME)     { scroll = 0; autoScroll = false; return true; }
-        if (e.key() == InputConstants.KEY_END)      { autoScroll = true; return true; }
+        if (e.key() == InputConstants.KEY_RETURN && !e.hasShiftDown()) {
+            submitToGitHub();
+            return true;
+        }
+        if (contentBox.keyPressed(e)) return true;
         return super.keyPressed(e);
     }
 
     @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean bl) {
-        for (Btn b : buttons) {
-            if (b.contains(event.x(), event.y())) { b.action.run(); return true; }
-        }
-        return super.mouseClicked(event, bl);
+    public boolean charTyped(CharacterEvent event) {
+        if (contentBox.charTyped(event)) return true;
+        return super.charTyped(event);
     }
 
-    // ---------- 工具 ----------
+    private static boolean openUri(String url) {
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            for (String cn : new String[]{
+                    "net.minecraft.Util",
+                    "net.minecraft.util.Util"
+            }) {
+                try {
+                    Class<?> cls = Class.forName(cn);
+                    Object platform = cls.getMethod("getPlatform").invoke(null);
+                    platform.getClass()
+                            .getMethod("openUri", java.net.URI.class)
+                            .invoke(platform, uri);
+                    return true;
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
 
-    private static int colorOf(FileLogger.Level lv, boolean continuation) {
-        if (continuation) return C_CONT;
-        return switch (lv) {
-            case TRACE -> C_TRACE;
-            case DEBUG -> C_DEBUG;
-            case INFO  -> C_INFO;
-            case WARN  -> C_WARN;
-            case ERROR -> C_ERROR;
-            case OFF   -> C_TEXT;
-        };
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            if (java.awt.Desktop.isDesktopSupported()
+                    && java.awt.Desktop.getDesktop()
+                            .isSupported(java.awt.Desktop.Action.BROWSE)) {
+                java.awt.Desktop.getDesktop().browse(uri);
+                return true;
+            }
+        } catch (Throwable ignored) {}
+
+        return false;
     }
 
     private static int lerpColor(int a, int b, float t) {
@@ -345,19 +413,15 @@ public class FeedbackScreen extends Screen {
         return (ra << 24) | (rr << 16) | (rg << 8) | rb;
     }
 
-    private record LogEntry(FileLogger.Level level, String time, String thread,
-                            String text, boolean continuation) {}
-
     private static class Btn {
         final int x, y, w, h;
         final String label;
         final Runnable action;
-        final boolean star;
         float hover = 0f;
 
-        Btn(int x, int y, int w, int h, String label, Runnable action, boolean star) {
+        Btn(int x, int y, int w, int h, String label, Runnable action) {
             this.x = x; this.y = y; this.w = w; this.h = h;
-            this.label = label; this.action = action; this.star = star;
+            this.label = label; this.action = action;
         }
         boolean contains(double mx, double my) {
             return mx >= x && mx < x + w && my >= y && my < y + h;

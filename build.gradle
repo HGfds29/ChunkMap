@@ -45,3 +45,24 @@ java {
 jar {
     from 'LICENSE'
 }
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifact remapJar // ✅ 发布remap后的正式mod jar，不是dev包
+            groupId = "com.egg.chunkmap"
+            artifactId = "chunkmap"
+            version = project.mod_version  
+        }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/HGfds29/chunkmap")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+}

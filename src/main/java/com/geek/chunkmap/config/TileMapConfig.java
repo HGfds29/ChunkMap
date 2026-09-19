@@ -8,13 +8,13 @@ public record TileMapConfig(
         boolean uiAnimation,
         boolean deleteOnUnload,
         int renderThreads,
-        int logRetentionDays
+        int logRetentionDays,
+        String githubToken
 ) {
     public enum ColorMode { MAP_COLOR, TEXTURE_AVERAGE }
 
     /**
      * 瓦片分辨率：只允许 16 / 32 / 64 三档。
-     * 配置界面用这个枚举渲染下拉框，避免用户乱填数值。
      */
     public enum Resolution {
         R16(16), R32(32), R64(64);
@@ -44,7 +44,8 @@ public record TileMapConfig(
                 true,
                 false,
                 2,
-                7
+                7,
+                ""
         );
     }
 
@@ -55,7 +56,8 @@ public record TileMapConfig(
         int retention = logRetentionDays >= 0 ? logRetentionDays : 7;
         String dir = (outputDir == null || outputDir.isBlank()) ? "chunkmap-output" : outputDir;
         ColorMode mode = colorMode != null ? colorMode : ColorMode.MAP_COLOR;
+        String token = githubToken == null ? "" : githubToken.trim();
         return new TileMapConfig(res, dir, mode, shadeByHeight, uiAnimation,
-                deleteOnUnload, threads, retention);
+                deleteOnUnload, threads, retention, token);
     }
 }

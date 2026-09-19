@@ -13,13 +13,13 @@ import net.fabricmc.api.ClientModInitializer;
 
 public class ChunkMapMod implements ClientModInitializer {
     public static final String MOD_ID = "chunkmap";
+    public static final String VERSION = "1.0.0.0-beta.4+1.21.11";
 
-    /** 唯一版本号，UI / 配置界面统一引用。 */
-    public static final String VERSION = "1.0.0.0-beta.3+1.21.11";
-
-    /** GitHub 仓库地址（Star / Issues 共用）。 */
-    public static final String GITHUB_URL = "https://github.com/HGfds29/ChunkMap";
+    public static final String GITHUB_REPO = "HGfds29/ChunkMap";
+    public static final String GITHUB_URL = "https://github.com/" + GITHUB_REPO;
     public static final String GITHUB_ISSUES_URL = GITHUB_URL + "/issues/new";
+    public static final String GITHUB_API_ISSUES =
+            "https://api.github.com/repos/" + GITHUB_REPO + "/issues";
 
     private static TileMapConfig config;
     private static FileLogger logger;
@@ -37,7 +37,6 @@ public class ChunkMapMod implements ClientModInitializer {
 
         logger = new FileLogger();
         logger.init();
-        // 允许 -Dchunkmap.logLevel=TRACE 打开详细日志，默认 INFO
         logger.setLevel(FileLogger.levelFromProperty("chunkmap.logLevel", FileLogger.Level.INFO));
 
         logger.cleanOldLogs(config.logRetentionDays());
@@ -60,10 +59,6 @@ public class ChunkMapMod implements ClientModInitializer {
         logger.info("===== ChunkMap 初始化完成，用时 " + (System.currentTimeMillis() - t0) + "ms =====");
     }
 
-    /**
-     * 重新加载配置并重建整条渲染链路。
-     * 注意：dispatcher 内的 config / storage / 线程池都会一起同步。
-     */
     public static void reload() {
         if (logger == null) return;
 
@@ -77,7 +72,6 @@ public class ChunkMapMod implements ClientModInitializer {
                 + " → " + config.shadeByHeight());
         logger.info("============================");
 
-        // 立即按新的保留天数清理旧日志（之前只在启动时清理，改了配置看不到效果）
         logger.cleanOldLogs(config.logRetentionDays());
 
         palette = BlockColorPalette.create(config.colorMode());
@@ -88,14 +82,24 @@ public class ChunkMapMod implements ClientModInitializer {
         if (dispatcher != null) {
             dispatcher.setRenderer(renderer);
             dispatcher.setSnapshotter(snapshotter);
-            // 同步 config / storage / 线程数
             dispatcher.updateConfig(config);
         }
 
-        // 外部 storage 只在 outputDir 变化时重建，避免与 dispatcher 内的 storage 指向不同目录
         if (old == null || !old.outputDir().equals(config.outputDir())) {
             storage = new TileStorage(config.outputDir());
         }
+    }
+
+    /**
+     * 获取当前生效的 GitHub Token。
+     * 只从配置中读取；未配置时返回空字符串。
+     * （不再有硬编码的兜底 token，避免源码泄露风险。）
+     */
+    public static String getEffectiveToken() {
+        if (config != null && config.githubToken() != null && !config.githubToken().isBlank()) {
+            return config.githubToken().trim();
+        }
+        return "";
     }
 
     public static TileMapConfig getConfig() { return config; }

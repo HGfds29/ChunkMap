@@ -10,7 +10,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * BlockState → RGB 的统一入口，带缓存。
- * 根据 config 选择解析策略（MAP_COLOR 或 TEXTURE_AVERAGE）。
  */
 public class BlockColorPalette {
     private final BlockColorResolver resolver;
@@ -22,14 +21,13 @@ public class BlockColorPalette {
 
     public int getColor(BlockState state, BlockGetter level, BlockPos pos) {
         if (state == null || state.isAir()) {
-            return 0x00000000; // 透明
+            return 0x00000000;
         }
         return cache.computeIfAbsent(state, s -> resolver.resolve(s, level, pos));
     }
 
     public static BlockColorPalette create(TileMapConfig.ColorMode mode) {
         if (mode == TileMapConfig.ColorMode.TEXTURE_AVERAGE) {
-            // 关键修正：之前这里误写成了 MapColorResolver，导致配置没效果
             return new BlockColorPalette(new TextureAverageResolver());
         }
         return new BlockColorPalette(new MapColorResolver());

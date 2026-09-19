@@ -58,10 +58,11 @@ public class ConfigLoader {
                 getString(o, "outputDir", "chunkmap-output"),
                 getColorMode(o),
                 getBool(o, "shadeByHeight", true),
-                getBool(o, "uiAnimation", true),     // 新增
+                getBool(o, "uiAnimation", true),
                 getBool(o, "deleteOnUnload", false),
                 getInt(o, "renderThreads", 2),
-                getInt(o, "logRetentionDays", 7)
+                getInt(o, "logRetentionDays", 7),
+                getString(o, "githubToken", "")
         );
     }
 
@@ -90,10 +91,11 @@ public class ConfigLoader {
         o.addProperty("outputDir", c.outputDir());
         o.addProperty("colorMode", c.colorMode().name());
         o.addProperty("shadeByHeight", c.shadeByHeight());
-        o.addProperty("uiAnimation", c.uiAnimation());       // 新增
+        o.addProperty("uiAnimation", c.uiAnimation());
         o.addProperty("deleteOnUnload", c.deleteOnUnload());
         o.addProperty("renderThreads", c.renderThreads());
         o.addProperty("logRetentionDays", c.logRetentionDays());
+        o.addProperty("githubToken", c.githubToken());
         return o;
     }
 }
