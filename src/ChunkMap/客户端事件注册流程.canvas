@@ -1,0 +1,21 @@
+{
+	"nodes":[
+		{"id":"5fbff8d9505f1626","type":"group","x":-261,"y":-87,"width":2821,"height":1687,"label":"客户端事件注册流程"},
+		{"id":"0cfc25e389eff1a1","type":"group","x":-160,"y":640,"width":660,"height":840,"label":"1 区块加载 ClientChunkEvents.CHUNK_UNLOAD"},
+		{"id":"06f30f72f137c738","type":"group","x":1760,"y":640,"width":684,"height":400,"label":"2 区块卸载"},
+		{"id":"79ab7efd81dcf6f8","type":"text","text":"类：`ClientEventHandler`","x":-185,"y":-14,"width":250,"height":60},
+		{"id":"e33b3711807610ee","type":"text","text":"注册的按键：\n\n- `M`：打开区块地图。\n    \n- `Alt + M`：打开配置界面。","x":-185,"y":158,"width":250,"height":182},
+		{"id":"809a1d749982d1a1","type":"text","text":"注册的事件","x":1000,"y":219,"width":250,"height":60},
+		{"id":"8aed11f33cc26a55","x":-135,"y":920,"width":375,"height":240,"type":"file","file":"md/config.deleteOnUnload() 为 true.md"},
+		{"id":"1b35745a566a8e7b","type":"text","text":"如果 `config.deleteOnUnload()`为","x":120,"y":680,"width":307,"height":60},
+		{"id":"4af69b7595c69057","x":320,"y":1060,"width":146,"height":60,"type":"text","text":"默认不删除"}
+	],
+	"edges":[
+		{"id":"60bea0030ac4d06c","fromNode":"79ab7efd81dcf6f8","fromSide":"bottom","toNode":"e33b3711807610ee","toSide":"top","toEnd":"none"},
+		{"id":"a1f12be37cce386b","fromNode":"e33b3711807610ee","fromSide":"right","toNode":"809a1d749982d1a1","toSide":"left"},
+		{"id":"408ca30ec77da8c2","fromNode":"809a1d749982d1a1","fromSide":"bottom","toNode":"0cfc25e389eff1a1","toSide":"top"},
+		{"id":"4b7221f725bcad78","fromNode":"809a1d749982d1a1","fromSide":"bottom","toNode":"06f30f72f137c738","toSide":"top"},
+		{"id":"c602449a92981594","fromNode":"1b35745a566a8e7b","fromSide":"bottom","toNode":"8aed11f33cc26a55","toSide":"top","label":"true"},
+		{"id":"18b5b2d69eff4b5a","fromNode":"1b35745a566a8e7b","fromSide":"bottom","toNode":"4af69b7595c69057","toSide":"top"}
+	]
+}

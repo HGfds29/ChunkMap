@@ -1,0 +1,31 @@
+{
+  "key.chunkmap.open_map": "打开区块地图",
+  "key.chunkmap.open_config": "打开 ChunkMap 配置",
+
+  "chunkmap.config.title": "ChunkMap 配置",
+  "chunkmap.config.category.general": "通用",
+  "chunkmap.config.category.performance": "性能",
+  "chunkmap.config.category.about": "关于",
+
+  "chunkmap.config.tileResolution": "瓦片分辨率",
+  "chunkmap.config.tileResolution.tooltip": "每个区块瓦片的像素边长。越高越清晰，但更占内存。",
+  "chunkmap.config.outputDir": "输出目录",
+  "chunkmap.config.outputDir.tooltip": "导出瓦片的目录（相对于游戏运行目录）。",
+  "chunkmap.config.colorMode": "颜色模式",
+  "chunkmap.config.colorMode.tooltip": "MAP_COLOR：原版地图调色板。TEXTURE_AVERAGE：纹理平均色。",
+  "chunkmap.config.shadeByHeight": "高度明暗",
+  "chunkmap.config.shadeByHeight.tooltip": "根据地势高度施加方向性光照（山脊亮、坡谷暗）。",
+  "chunkmap.config.uiAnimation": "UI 动画",
+  "chunkmap.config.uiAnimation.tooltip": "启用地图 UI 的平滑动画（打开淡入、悬停过渡等）。",
+  "chunkmap.config.deleteOnUnload": "卸载时删除瓦片",
+  "chunkmap.config.deleteOnUnload.tooltip": "区块卸载时删除对应瓦片文件。节省磁盘但丢失历史。",
+
+  "chunkmap.config.renderThreads": "渲染线程数",
+  "chunkmap.config.renderThreads.tooltip": "瓦片渲染的工作线程数量。",
+  "chunkmap.config.logRetentionDays": "日志保留天数",
+  "chunkmap.config.logRetentionDays.never": "永久保留",
+  "chunkmap.config.logRetentionDays.tooltip": "自动删除超过天数的日志。0 = 永久保留。",
+
+  "chunkmap.config.about.version": "版本：%s",
+  "chunkmap.config.about.hint": "Alt+M 打开此界面，M 打开地图。"
+}

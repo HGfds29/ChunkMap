@@ -1,0 +1,18 @@
+{
+	"nodes":[
+		{"id":"7e0d42c90a198b97","type":"group","x":-300,"y":-160,"width":1060,"height":760,"label":"类：FileLogger"},
+		{"id":"cb489b43daea0116","type":"file","file":"md/log.md","x":-260,"y":-140,"width":400,"height":580},
+		{"id":"939b40b70b0f2452","type":"text","text":"客户端停止时 `logger.close()`","x":294,"y":440,"width":360,"height":60},
+		{"id":"150d8a0c240659b1","type":"text","text":"异常会打印堆栈","x":289,"y":-131,"width":250,"height":60},
+		{"id":"269be4642ee60da7","type":"text","text":"cleanOldLogs(retentionDays)","x":280,"y":20,"width":348,"height":60},
+		{"id":"b1db260f12d17fc7","type":"file","file":"md/cleanOldLogs(retentionDays).md","x":254,"y":150,"width":400,"height":187},
+		{"id":"2f8b50cc0678a55b","x":860,"y":150,"width":250,"height":147,"type":"text","text":"## 客户端事件注册流程\n[[客户端事件注册流程.canvas]]"}
+	],
+	"edges":[
+		{"id":"dd369d8beeed9790","fromNode":"cb489b43daea0116","fromSide":"right","toNode":"150d8a0c240659b1","toSide":"left"},
+		{"id":"3f3a12de15495036","fromNode":"cb489b43daea0116","fromSide":"right","toNode":"269be4642ee60da7","toSide":"left"},
+		{"id":"a0651931b056b762","fromNode":"269be4642ee60da7","fromSide":"bottom","toNode":"b1db260f12d17fc7","toSide":"top"},
+		{"id":"8a01748eeaa74d76","fromNode":"cb489b43daea0116","fromSide":"right","toNode":"939b40b70b0f2452","toSide":"left"},
+		{"id":"b97fb181dff37ef9","fromNode":"7e0d42c90a198b97","fromSide":"right","toNode":"2f8b50cc0678a55b","toSide":"left"}
+	]
+}

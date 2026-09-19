@@ -4,7 +4,7 @@ out/
 *.class
 *.jar
 !src/main/resources/*.jar
-ChunkMap/
+ChunkMapReleases/
 
 # ========== Gradle相关缓存与本地下载包 ==========
 .gradle/

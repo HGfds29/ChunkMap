@@ -1,0 +1,31 @@
+{
+  "key.chunkmap.open_map": "Open Chunk Map",
+  "key.chunkmap.open_config": "Open ChunkMap Config",
+
+  "chunkmap.config.title": "ChunkMap Configuration",
+  "chunkmap.config.category.general": "General",
+  "chunkmap.config.category.performance": "Performance",
+  "chunkmap.config.category.about": "About",
+
+  "chunkmap.config.tileResolution": "Tile Resolution",
+  "chunkmap.config.tileResolution.tooltip": "Pixels per chunk tile. Higher = sharper but more memory.",
+  "chunkmap.config.outputDir": "Output Directory",
+  "chunkmap.config.outputDir.tooltip": "Directory for exported tiles (relative to game folder).",
+  "chunkmap.config.colorMode": "Color Mode",
+  "chunkmap.config.colorMode.tooltip": "MAP_COLOR: vanilla map palette. TEXTURE_AVERAGE: average texture color.",
+  "chunkmap.config.shadeByHeight": "Shade by Height",
+  "chunkmap.config.shadeByHeight.tooltip": "Apply directional lighting based on terrain height.",
+  "chunkmap.config.uiAnimation": "UI Animations",
+  "chunkmap.config.uiAnimation.tooltip": "Enable smooth animations in the map UI.",
+  "chunkmap.config.deleteOnUnload": "Delete Tiles on Unload",
+  "chunkmap.config.deleteOnUnload.tooltip": "Delete tile files when a chunk is unloaded.",
+
+  "chunkmap.config.renderThreads": "Render Threads",
+  "chunkmap.config.renderThreads.tooltip": "Number of worker threads for tile rendering.",
+  "chunkmap.config.logRetentionDays": "Log Retention (Days)",
+  "chunkmap.config.logRetentionDays.never": "Never delete",
+  "chunkmap.config.logRetentionDays.tooltip": "Auto-delete logs older than this many days. 0 = never.",
+
+  "chunkmap.config.about.version": "Version: %s",
+  "chunkmap.config.about.hint": "Alt+M to open this screen. M to open the map."
+}

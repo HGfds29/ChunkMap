@@ -1,0 +1,23 @@
+{
+	"nodes":[
+		{"id":"215865129442424d","type":"group","x":460,"y":40,"width":1380,"height":640,"label":"配置界面"},
+		{"id":"66e9ad2171cb0c27","type":"text","text":"`createConfigScreen(parent)` 调用 `ConfigLoader.load()` 读取当前配置。","x":509,"y":112,"width":631,"height":50},
+		{"id":"ced619a973fb7e81","type":"text","text":"用 `MutableConfig` 持有可变字段","x":660,"y":220,"width":330,"height":60},
+		{"id":"5f55fc3b5e38d681","type":"text","text":"使用 Cloth Config 构建分类","x":990,"y":340,"width":250,"height":60},
+		{"id":"6985e47e655f6fee","type":"file","file":"md/Cloth Config 构建分类.md","x":1240,"y":112,"width":400,"height":200},
+		{"id":"fb818941274b2d30","type":"text","text":"保存时执行","x":990,"y":460,"width":250,"height":60},
+		{"id":"b548d32141bacb0d","type":"text","text":"- `ConfigLoader.save(holder.toRecord())`，只写入 JSON 文件。","x":1300,"y":440,"width":469,"height":101},
+		{"id":"80f71c01bc08e180","type":"file","file":"md/注意1.md","x":509,"y":415,"width":400,"height":211},
+		{"id":"ed2eff6c329097e9","type":"text","text":"## 日志流程\n[[日志流程.canvas]]","x":1980,"y":312,"width":167,"height":100},
+		{"id":"b61eebdd980c921c","type":"file","file":"md/配置文件.md","x":-380,"y":-160,"width":793,"height":1039}
+	],
+	"edges":[
+		{"id":"6f68f83c081e7975","fromNode":"b61eebdd980c921c","fromSide":"right","toNode":"215865129442424d","toSide":"left","fromEnd":"arrow"},
+		{"id":"7750489462b686aa","fromNode":"66e9ad2171cb0c27","fromSide":"bottom","toNode":"ced619a973fb7e81","toSide":"top"},
+		{"id":"855ce719766aab9d","fromNode":"ced619a973fb7e81","fromSide":"bottom","toNode":"5f55fc3b5e38d681","toSide":"left"},
+		{"id":"1e0a2d7b330a2949","fromNode":"5f55fc3b5e38d681","fromSide":"top","toNode":"6985e47e655f6fee","toSide":"left"},
+		{"id":"00b7aba99a6da58b","fromNode":"5f55fc3b5e38d681","fromSide":"bottom","toNode":"fb818941274b2d30","toSide":"top","fromEnd":"arrow"},
+		{"id":"85aaf0fe37a72c71","fromNode":"fb818941274b2d30","fromSide":"right","toNode":"b548d32141bacb0d","toSide":"left"},
+		{"id":"62f6b1bf928491dc","fromNode":"215865129442424d","fromSide":"right","toNode":"ed2eff6c329097e9","toSide":"left"}
+	]
+}
