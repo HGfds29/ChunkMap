@@ -40,13 +40,14 @@ public class ConfigurationScreen implements ModMenuApi {
         ConfigCategory general = builder.getOrCreateCategory(
                 Component.translatable("chunkmap.config.category.general"));
 
-        general.addEntry(e.startIntSlider(
+        // 关键：改成枚举选择器，只有 16×16 / 32×32 / 64×64 三档
+        general.addEntry(e.startEnumSelector(
                         Component.translatable("chunkmap.config.tileResolution"),
-                        current.tileResolution(), 16, 64)
-                .setDefaultValue(32)
-                .setTextGetter(v -> Component.literal(v + " px"))
+                        TileMapConfig.Resolution.class,
+                        TileMapConfig.Resolution.fromPx(current.tileResolution()))
+                .setDefaultValue(TileMapConfig.Resolution.R32)
                 .setTooltip(Component.translatable("chunkmap.config.tileResolution.tooltip"))
-                .setSaveConsumer(v -> holder.tileResolution = v)
+                .setSaveConsumer(v -> holder.tileResolution = v.px())
                 .build());
 
         general.addEntry(e.startStrField(
@@ -118,7 +119,6 @@ public class ConfigurationScreen implements ModMenuApi {
         ConfigCategory about = builder.getOrCreateCategory(
                 Component.translatable("chunkmap.config.category.about"));
 
-        // 版本号统一引用常量，避免与 ChunkMapMod 不一致
         about.addEntry(e.startTextDescription(
                 Component.translatable("chunkmap.config.about.version",
                         ChunkMapMod.VERSION)).build());

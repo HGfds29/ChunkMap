@@ -55,6 +55,10 @@ public class ChunkMapScreen extends Screen {
     private static final int C_TOAST_OK   = 0xFF7EE787;
     private static final int C_TOAST_ERR  = 0xFFFF7B72;
 
+    /** 金色 Star 按钮配色。 */
+    private static final int C_STAR       = 0xFFD4A017;
+    private static final int C_STAR_HI    = 0xFFFFE082;
+
     private static final int TOPBAR_H = 30;
     private static final int BOTBAR_H = 20;
     private static final int BTN_H    = 18;
@@ -97,7 +101,7 @@ public class ChunkMapScreen extends Screen {
     private boolean pendingReload = false;
 
     private final List<Btn> buttons = new ArrayList<>();
-    private Btn btnExport, btnCenter, btnReset, btnClose;
+    private Btn btnExport, btnCenter, btnReset, btnClose, btnFeedback, btnStar;
 
     private long openTime = 0;
 
@@ -158,7 +162,7 @@ public class ChunkMapScreen extends Screen {
         int y = (TOPBAR_H - BTN_H) / 2;
         int x = width - 8;
 
-        btnClose = new Btn(x - 22, y, 22, BTN_H, "X", this::onClose);
+        btnClose = new Btn(x - 22, y, 22, BTN_H, "X", this::onClose, false);
         x -= 22 + 4;
 
         btnReset = new Btn(x - 24, y, 24, BTN_H, "1:1", () -> {
@@ -166,21 +170,45 @@ public class ChunkMapScreen extends Screen {
             offsetX = 0;
             offsetZ = 0;
             zoomToastUntil = System.currentTimeMillis() + 900;
-        });
+        }, false);
         x -= 24 + 4;
 
         btnCenter = new Btn(x - 60, y, 60, BTN_H, "回到玩家", () -> {
             offsetX = 0;
             offsetZ = 0;
-        });
+        }, false);
         x -= 60 + 4;
 
-        btnExport = new Btn(x - 44, y, 44, BTN_H, "导出", this::exportStitchedMap);
+        btnExport = new Btn(x - 44, y, 44, BTN_H, "导出", this::exportStitchedMap, false);
+        x -= 44 + 4;
+
+        btnFeedback = new Btn(x - 44, y, 44, BTN_H, "反馈", this::openFeedback, false);
+        x -= 44 + 4;
+
+        btnStar = new Btn(x - 62, y, 62, BTN_H, "★ Star", this::openStarPage, true);
+        x -= 62 + 4;
 
         buttons.add(btnClose);
         buttons.add(btnReset);
         buttons.add(btnCenter);
         buttons.add(btnExport);
+        buttons.add(btnFeedback);
+        buttons.add(btnStar);
+    }
+
+    private void openFeedback() {
+        minecraft.setScreen(new FeedbackScreen(this));
+    }
+
+    private void openStarPage() {
+        try {
+            java.awt.Desktop.getDesktop().browse(java.net.URI.create(ChunkMapMod.GITHUB_URL));
+            showExportMsg("已在浏览器打开 GitHub，感谢 Star ⭐", true);
+            if (logger != null) logger.info("[UI] 打开 Star 页面: " + ChunkMapMod.GITHUB_URL);
+        } catch (Throwable t) {
+            showExportMsg("请手动打开: " + ChunkMapMod.GITHUB_URL, false);
+            if (logger != null) logger.warn("[UI] 打开 Star 页面失败: " + t.getMessage());
+        }
     }
 
     // ---------- 渲染 ----------
@@ -198,7 +226,7 @@ public class ChunkMapScreen extends Screen {
         if (curRes != tileRes) {
             tileRes = curRes;
             recomputeLayout();
-            lastTileRes = -1; // 强制下一帧重建纹理
+            lastTileRes = -1;
         }
 
         float dt = Math.min(delta, 0.1f);
@@ -265,23 +293,38 @@ public class ChunkMapScreen extends Screen {
         }
     }
 
+    /**
+     * 精确的地图屏幕矩形（未取整），供 map body / grid / player marker 共用。
+     * 只要三者都用同一份数学，就不会再出现放大后网格与区块错位。
+     *
+     * @return {drawX, drawY, drawW, drawH}
+     */
+    private double[] computeMapRect() {
+        if (texSize <= 0) return new double[]{0, 0, 0, 0};
+        double cx = width / 2.0 + offsetX;
+        double cz = height / 2.0 + offsetZ;
+        double w = texSize * zoom;
+        double h = texSize * zoom;
+        return new double[]{cx - w / 2.0, cz - h / 2.0, w, h};
+    }
+
     private void drawMapBody(GuiGraphics g) {
-        if (texture == null) return;
-
-        int centerPx = (int) (width / 2.0 + offsetX);
-        int centerPz = (int) (height / 2.0 + offsetZ);
-
-        int drawW = (int) Math.round(texSize * zoom);
-        int drawH = (int) Math.round(texSize * zoom);
-        int drawX = centerPx - drawW / 2;
-        int drawY = centerPz - drawH / 2;
+        if (texture == null || texSize <= 0) return;
+        double[] r = computeMapRect();
 
         g.enableScissor(0, TOPBAR_H, width, height - BOTBAR_H);
-        g.fill(drawX, drawY, drawX + drawW, drawY + drawH, C_MAP_BG);
+
+        // 地图背景用取整后的外扩矩形，避免边缘漏底
+        int bgL = (int) Math.floor(r[0]);
+        int bgT = (int) Math.floor(r[1]);
+        int bgR = (int) Math.ceil(r[0] + r[2]);
+        int bgB = (int) Math.ceil(r[1] + r[3]);
+        g.fill(bgL, bgT, bgR, bgB, C_MAP_BG);
 
         var pose = g.pose();
         pose.pushMatrix();
-        pose.translate((float) drawX, (float) drawY);
+        // 关键修复：使用未取整的原点 + scale，让纹理边界与网格数学一致
+        pose.translate((float) r[0], (float) r[1]);
         pose.scale((float) zoom, (float) zoom);
 
         g.blit(RenderPipelines.GUI_TEXTURED, TEXTURE_ID,
@@ -295,48 +338,59 @@ public class ChunkMapScreen extends Screen {
     }
 
     private void drawGrid(GuiGraphics g) {
-        if (texture == null) return;
+        if (texture == null || texSize <= 0) return;
+
+        // 精确格宽（浮点），与纹理像素边界数学一致
         double cellF = tileRes * zoom;
         if (cellF < 4) return;
 
-        int centerPx = (int) (width / 2.0 + offsetX);
-        int centerPz = (int) (height / 2.0 + offsetZ);
-        int drawW = (int) Math.round(texSize * zoom);
-        int drawH = (int) Math.round(texSize * zoom);
-        int drawX = centerPx - drawW / 2;
-        int drawY = centerPz - drawH / 2;
+        double[] r = computeMapRect();
+        double drawX = r[0], drawY = r[1], drawW = r[2], drawH = r[3];
 
-        int top = Math.max(TOPBAR_H, drawY);
-        int bot = Math.min(height - BOTBAR_H, drawY + drawH);
-        int left = Math.max(0, drawX);
-        int right = Math.min(width, drawX + drawW);
+        int top   = Math.max(TOPBAR_H, (int) Math.ceil(drawY));
+        int bot   = Math.min(height - BOTBAR_H, (int) Math.floor(drawY + drawH));
+        int left  = Math.max(0, (int) Math.ceil(drawX));
+        int right = Math.min(width, (int) Math.floor(drawX + drawW));
         if (top >= bot || left >= right) return;
 
-        int cell = (int) Math.round(cellF);
-        int color = cell >= 22 ? C_GRID_LIGHT : C_GRID_DARK;
+        int color = cellF >= 22 ? C_GRID_LIGHT : C_GRID_DARK;
 
         g.enableScissor(left, top, right, bot);
-        for (int x = drawX; x <= drawX + drawW; x += cell) {
+
+        // 竖线：位置 = drawX + i * cellF，i 精确推进，不累积整数误差
+        int startI = (int) Math.floor((left - drawX) / cellF);
+        int endI   = (int) Math.ceil((right - drawX) / cellF);
+        for (int i = startI; i <= endI; i++) {
+            int x = (int) Math.round(drawX + i * cellF);
             if (x < left || x >= right) continue;
             g.fill(x, top, x + 1, bot, color);
         }
-        for (int y = drawY; y <= drawY + drawH; y += cell) {
+
+        // 横线同理
+        int startJ = (int) Math.floor((top - drawY) / cellF);
+        int endJ   = (int) Math.ceil((bot - drawY) / cellF);
+        for (int j = startJ; j <= endJ; j++) {
+            int y = (int) Math.round(drawY + j * cellF);
             if (y < top || y >= bot) continue;
             g.fill(left, y, right, y + 1, color);
         }
+
         g.disableScissor();
     }
 
     private void drawPlayerMarker(GuiGraphics g, LocalPlayer player, ChunkPos chunk) {
-        int cx = (int) (width / 2.0 + offsetX);
-        int cy = (int) (height / 2.0 + offsetZ);
+        double[] r = computeMapRect();
+        if (r[2] <= 0 || r[3] <= 0) return;
 
-        double ccx = chunk.x * 16 + 8;
-        double ccz = chunk.z * 16 + 8;
-        double pxPerBlock = tileRes * zoom / 16.0;
+        double mapCx = r[0] + r[2] / 2.0;
+        double mapCz = r[1] + r[3] / 2.0;
+        // 一个方块的屏幕宽度 = 一格 tile 宽度 / 16
+        double pxPerBlock = r[2] / ((2 * radius + 1) * 16.0);
 
-        int px = (int) Math.round(cx + (player.getX() - ccx) * pxPerBlock);
-        int py = (int) Math.round(cy + (player.getZ() - ccz) * pxPerBlock);
+        double worldCx = chunk.x * 16 + 8;
+        double worldCz = chunk.z * 16 + 8;
+        int px = (int) Math.round(mapCx + (player.getX() - worldCx) * pxPerBlock);
+        int py = (int) Math.round(mapCz + (player.getZ() - worldCz) * pxPerBlock);
 
         if (py < TOPBAR_H || py >= height - BOTBAR_H) return;
 
@@ -468,8 +522,12 @@ public class ChunkMapScreen extends Screen {
         float alpha = openProgress;
 
         int bg      = lerpColor(C_BTN_BG, C_BTN_HOVER, h);
-        int border  = lerpColor(C_BTN_BORDER, C_BTN_BORDER_HOVER, h);
-        int textCol = lerpColor(C_TEXT_DIM, C_TEXT, h);
+        int border  = b.star
+                ? lerpColor(C_STAR, C_STAR_HI, h)
+                : lerpColor(C_BTN_BORDER, C_BTN_BORDER_HOVER, h);
+        int textCol = b.star
+                ? lerpColor(C_STAR, C_STAR_HI, h)
+                : lerpColor(C_TEXT_DIM, C_TEXT, h);
 
         g.fill(b.x + 1, b.y + 1, b.x + b.w + 1, b.y + b.h + 1, withAlpha(0x40000000, alpha));
         g.fill(b.x, b.y, b.x + b.w, b.y + b.h, withAlpha(bg, alpha));
@@ -481,8 +539,11 @@ public class ChunkMapScreen extends Screen {
 
         int topBarH = 1 + (int) Math.round(h * 2f);
         if (topBarH > 0) {
+            int accent = b.star
+                    ? lerpColor(C_STAR, C_STAR_HI, h)
+                    : lerpColor(C_ACCENT, C_ACCENT_HI, h);
             g.fill(b.x + 1, b.y + 1, b.x + b.w - 1, b.y + 1 + topBarH,
-                    withAlpha(lerpColor(C_ACCENT, C_ACCENT_HI, h), alpha));
+                    withAlpha(accent, alpha));
         }
 
         int tw = font.width(b.label);
@@ -654,7 +715,6 @@ public class ChunkMapScreen extends Screen {
 
         exporting = true;
         final Identifier dim = level.dimension().identifier();
-        // 从最新配置动态读取（重载后自动生效）
         final String dir = currentOutputDir();
         final int res = currentTileRes();
         showExportMsg("正在导出...", false);
@@ -734,11 +794,12 @@ public class ChunkMapScreen extends Screen {
         final int x, y, w, h;
         final String label;
         final Runnable action;
+        final boolean star;
         float hover = 0f;
 
-        Btn(int x, int y, int w, int h, String label, Runnable action) {
+        Btn(int x, int y, int w, int h, String label, Runnable action, boolean star) {
             this.x = x; this.y = y; this.w = w; this.h = h;
-            this.label = label; this.action = action;
+            this.label = label; this.action = action; this.star = star;
         }
 
         boolean contains(double mx, double my) {

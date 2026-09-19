@@ -8,7 +8,7 @@
   "chunkmap.config.category.about": "关于",
 
   "chunkmap.config.tileResolution": "瓦片分辨率",
-  "chunkmap.config.tileResolution.tooltip": "每个区块瓦片的像素边长。越高越清晰，但更占内存。",
+  "chunkmap.config.tileResolution.tooltip": "每个区块瓦片的像素边长，可选 16 / 32 / 64。",
   "chunkmap.config.outputDir": "输出目录",
   "chunkmap.config.outputDir.tooltip": "导出瓦片的目录（相对于游戏运行目录）。",
   "chunkmap.config.colorMode": "颜色模式",
@@ -21,11 +21,11 @@
   "chunkmap.config.deleteOnUnload.tooltip": "区块卸载时删除对应瓦片文件。节省磁盘但丢失历史。",
 
   "chunkmap.config.renderThreads": "渲染线程数",
-  "chunkmap.config.renderThreads.tooltip": "瓦片渲染的工作线程数量。",
+  "chunkmap.config.renderThreads.tooltip": "瓦片渲染的工作线程数量，重载配置后立即生效。",
   "chunkmap.config.logRetentionDays": "日志保留天数",
   "chunkmap.config.logRetentionDays.never": "永久保留",
   "chunkmap.config.logRetentionDays.tooltip": "自动删除超过天数的日志。0 = 永久保留。",
 
   "chunkmap.config.about.version": "版本：%s",
-  "chunkmap.config.about.hint": "Alt+M 打开此界面，M 打开地图。"
+  "chunkmap.config.about.hint": "Alt+M 打开此界面，M 打开地图。地图里点“反馈”可查看日志。"
 }

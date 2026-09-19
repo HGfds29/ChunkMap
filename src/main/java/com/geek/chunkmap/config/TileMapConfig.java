@@ -5,12 +5,35 @@ public record TileMapConfig(
         String outputDir,
         ColorMode colorMode,
         boolean shadeByHeight,
-        boolean uiAnimation,       // 新增：是否启用 UI 动画
+        boolean uiAnimation,
         boolean deleteOnUnload,
         int renderThreads,
         int logRetentionDays
 ) {
     public enum ColorMode { MAP_COLOR, TEXTURE_AVERAGE }
+
+    /**
+     * 瓦片分辨率：只允许 16 / 32 / 64 三档。
+     * 配置界面用这个枚举渲染下拉框，避免用户乱填数值。
+     */
+    public enum Resolution {
+        R16(16), R32(32), R64(64);
+
+        private final int px;
+        Resolution(int px) { this.px = px; }
+        public int px() { return px; }
+
+        public static Resolution fromPx(int px) {
+            return switch (px) {
+                case 16 -> R16;
+                case 64 -> R64;
+                default -> R32;
+            };
+        }
+
+        @Override
+        public String toString() { return px + " × " + px; }
+    }
 
     public static TileMapConfig defaults() {
         return new TileMapConfig(
@@ -18,7 +41,7 @@ public record TileMapConfig(
                 "chunkmap-output",
                 ColorMode.MAP_COLOR,
                 true,
-                true,              // uiAnimation 默认开
+                true,
                 false,
                 2,
                 7

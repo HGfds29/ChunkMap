@@ -15,7 +15,11 @@ public class ChunkMapMod implements ClientModInitializer {
     public static final String MOD_ID = "chunkmap";
 
     /** 唯一版本号，UI / 配置界面统一引用。 */
-    public static final String VERSION = "1.0.0.0-beta.2+1.21.11";
+    public static final String VERSION = "1.0.0.0-beta.3+1.21.11";
+
+    /** GitHub 仓库地址（Star / Issues 共用）。 */
+    public static final String GITHUB_URL = "https://github.com/HGfds29/ChunkMap";
+    public static final String GITHUB_ISSUES_URL = GITHUB_URL + "/issues/new";
 
     private static TileMapConfig config;
     private static FileLogger logger;
@@ -58,7 +62,7 @@ public class ChunkMapMod implements ClientModInitializer {
 
     /**
      * 重新加载配置并重建整条渲染链路。
-     * 注意：dispatcher 内的 config / storage 也会一起同步。
+     * 注意：dispatcher 内的 config / storage / 线程池都会一起同步。
      */
     public static void reload() {
         if (logger == null) return;
@@ -73,6 +77,9 @@ public class ChunkMapMod implements ClientModInitializer {
                 + " → " + config.shadeByHeight());
         logger.info("============================");
 
+        // 立即按新的保留天数清理旧日志（之前只在启动时清理，改了配置看不到效果）
+        logger.cleanOldLogs(config.logRetentionDays());
+
         palette = BlockColorPalette.create(config.colorMode());
         renderer = new ChunkTopDownRenderer(config.tileResolution(), config.shadeByHeight());
         snapshotter = new ChunkSnapshotter(palette);
@@ -81,7 +88,7 @@ public class ChunkMapMod implements ClientModInitializer {
         if (dispatcher != null) {
             dispatcher.setRenderer(renderer);
             dispatcher.setSnapshotter(snapshotter);
-            // 关键：同步 config 与 storage（outputDir 变了会重建 storage）
+            // 同步 config / storage / 线程数
             dispatcher.updateConfig(config);
         }
 

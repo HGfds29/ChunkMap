@@ -8,7 +8,7 @@
   "chunkmap.config.category.about": "About",
 
   "chunkmap.config.tileResolution": "Tile Resolution",
-  "chunkmap.config.tileResolution.tooltip": "Pixels per chunk tile. Higher = sharper but more memory.",
+  "chunkmap.config.tileResolution.tooltip": "Pixels per chunk tile. Choose 16 / 32 / 64.",
   "chunkmap.config.outputDir": "Output Directory",
   "chunkmap.config.outputDir.tooltip": "Directory for exported tiles (relative to game folder).",
   "chunkmap.config.colorMode": "Color Mode",
@@ -21,11 +21,11 @@
   "chunkmap.config.deleteOnUnload.tooltip": "Delete tile files when a chunk is unloaded.",
 
   "chunkmap.config.renderThreads": "Render Threads",
-  "chunkmap.config.renderThreads.tooltip": "Number of worker threads for tile rendering.",
+  "chunkmap.config.renderThreads.tooltip": "Number of worker threads for tile rendering. Changes apply immediately after reload.",
   "chunkmap.config.logRetentionDays": "Log Retention (Days)",
   "chunkmap.config.logRetentionDays.never": "Never delete",
   "chunkmap.config.logRetentionDays.tooltip": "Auto-delete logs older than this many days. 0 = never.",
 
   "chunkmap.config.about.version": "Version: %s",
-  "chunkmap.config.about.hint": "Alt+M to open this screen. M to open the map."
+  "chunkmap.config.about.hint": "Alt+M to open this screen. M to open the map. Click 'Feedback' in the map for logs."
 }

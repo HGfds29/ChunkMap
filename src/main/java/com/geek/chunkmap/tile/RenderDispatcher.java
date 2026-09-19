@@ -40,8 +40,11 @@ public class RenderDispatcher {
     private final AtomicLong renderedCount = new AtomicLong();
     private final AtomicLong failedCount = new AtomicLong();
 
-    private ExecutorService workers;
-    private ExecutorService ioExecutor;   // 单线程 IO：所有 PNG 写盘都排队到这里
+    /** 每次重建线程池自增，旧线程看到 gen 不匹配就会自然退出。 */
+    private final AtomicLong workerGen = new AtomicLong();
+
+    private volatile ExecutorService workers;
+    private final ExecutorService ioExecutor;   // 单线程 IO：所有 PNG 写盘都排队到这里
     private volatile ResourceKey<Level> currentDimension;
     private volatile boolean running = false;
 
@@ -61,16 +64,24 @@ public class RenderDispatcher {
     }
 
     /**
-     * 热替换配置。outputDir 变化时重建 storage，
-     * 保证后续写盘路径与新配置一致。
+     * 热替换配置。
+     * - outputDir 变化 → 重建 storage
+     * - renderThreads 变化 → 重建线程池（旧线程自然退出）
      */
     public void updateConfig(TileMapConfig newConfig) {
         boolean outputChanged = !this.config.outputDir().equals(newConfig.outputDir());
+        int oldThreads = this.config.renderThreads();
         this.config = newConfig;
+
         if (outputChanged) {
             this.storage = new TileStorage(newConfig.outputDir());
             logger.info("[Dispatcher] outputDir 变化，重建 storage → " + newConfig.outputDir());
         }
+
+        if (running && newConfig.renderThreads() != oldThreads) {
+            restartWorkers(newConfig.renderThreads());
+        }
+
         logger.info("[Dispatcher] config 已更新: " + newConfig);
     }
 
@@ -110,10 +121,8 @@ public class RenderDispatcher {
         enqueuedCount.incrementAndGet();
     }
 
-    public void start() {
-        running = true;
-        int n = config.renderThreads();
-        workers = new ThreadPoolExecutor(
+    private ExecutorService buildWorkerPool(int n) {
+        return new ThreadPoolExecutor(
                 n, n, 0L, TimeUnit.MILLISECONDS,
                 new LinkedBlockingQueue<>(),
                 r -> {
@@ -123,10 +132,29 @@ public class RenderDispatcher {
                 },
                 new ThreadPoolExecutor.CallerRunsPolicy()
         );
+    }
+
+    public void start() {
+        running = true;
+        int n = config.renderThreads();
+        long gen = workerGen.incrementAndGet();
+        workers = buildWorkerPool(n);
         for (int i = 0; i < n; i++) {
-            workers.submit(this::workerLoop);
+            workers.submit(() -> workerLoop(gen));
         }
         logger.info("[Dispatcher] 启动, 工作线程数=" + n);
+    }
+
+    /** 运行时重建工作线程池：旧线程在下一轮循环检测到 gen 变化后自然退出。 */
+    private void restartWorkers(int n) {
+        ExecutorService old = this.workers;
+        long gen = workerGen.incrementAndGet();
+        this.workers = buildWorkerPool(n);
+        for (int i = 0; i < n; i++) {
+            workers.submit(() -> workerLoop(gen));
+        }
+        if (old != null) old.shutdown();
+        logger.info("[Dispatcher] 工作线程数 → " + n);
     }
 
     public void shutdown() {
@@ -160,8 +188,8 @@ public class RenderDispatcher {
 
     public ResourceKey<Level> getCurrentDimension() { return currentDimension; }
 
-    private void workerLoop() {
-        while (running) {
+    private void workerLoop(long gen) {
+        while (running && gen == workerGen.get()) {
             try {
                 ChunkSnapshot snap = queue.poll(100, TimeUnit.MILLISECONDS);
                 if (snap == null) continue;
