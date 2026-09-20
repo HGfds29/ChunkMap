@@ -77,11 +77,15 @@ public class FeedbackScreen extends Screen {
 
     @Override
     protected void init() {
-        int boxW = Math.min(420, width - 60);
-        int boxX = (width - boxW) / 2;
-        int boxY = TOPBAR_H + 44;
+        // ================= 修改开始：全屏输入框 =================
+        int boxX = 20;
+        int boxY = TOPBAR_H + 40;
+        int boxW = width - 40;
+        int boxH = Math.max(20, height - boxY - BOTBAR_H - 20);
 
-        contentBox = new EditBox(font, boxX, boxY, boxW, 20, Component.literal("反馈内容"));
+        contentBox = new EditBox(font, boxX, boxY, boxW, boxH, Component.literal("反馈内容"));
+        // ================= 修改结束 =================
+
         contentBox.setMaxLength(2000);
         contentBox.setHint(Component.literal("请输入反馈内容…"));
         contentBox.setValue("");
@@ -272,10 +276,11 @@ public class FeedbackScreen extends Screen {
     public void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
         g.fill(0, 0, width, height, C_BG);
 
-        int boxW = Math.min(420, width - 60);
-        int boxX = (width - boxW) / 2;
+        // ================= 修改开始：全屏提示文字位置 =================
+        int boxX = 20;
         g.drawString(font, "请输入反馈内容（提交时自动附上版本号、玩家名和最后 50 行日志）：",
-                boxX, TOPBAR_H + 24, C_TEXT_DIM, false);
+                boxX, TOPBAR_H + 20, C_TEXT_DIM, false);
+        // ================= 修改结束 =================
 
         if (!canSubmitToday()) {
             long remain = DAY_MS - (System.currentTimeMillis() - lastSubmitTime());
