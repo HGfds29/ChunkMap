@@ -39,9 +39,13 @@ jobs:
           path: build/libs/*.jar
 
       # 拿到jar文件列表，解决attest不支持通配符问题
-      - name: Get jar path
-        id: jar_file
-        run: echo "path=$(ls build/libs/*.jar)" >> $GITHUB_OUTPUT
+- name: Get jar path
+  id: jar_file
+  run: |
+    jar=$(ls build/libs/*.jar)
+    echo "path<<EOF" >> $GITHUB_OUTPUT
+    echo "$jar" >> $GITHUB_OUTPUT
+    echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Generate SLSA3 Artifact Attestation
         uses: actions/attest-build-provenance@v1
