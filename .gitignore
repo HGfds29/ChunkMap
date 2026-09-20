@@ -4,6 +4,7 @@ out/
 !src/main/resources/*.jar
 ChunkMapReleases/
 build/
+*.7z
 
 # ========== Gradle相关缓存与本地下载包 ==========
 .gradle/

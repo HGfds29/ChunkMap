@@ -4,6 +4,7 @@
 
   "chunkmap.config.title": "ChunkMap Configuration",
   "chunkmap.config.category.general": "General",
+  "chunkmap.config.category.feedback": "Feedback",
   "chunkmap.config.category.performance": "Performance",
   "chunkmap.config.category.about": "About",
 
@@ -20,6 +21,10 @@
   "chunkmap.config.deleteOnUnload": "Delete Tiles on Unload",
   "chunkmap.config.deleteOnUnload.tooltip": "Delete tile files when a chunk is unloaded.",
 
+  "chunkmap.config.githubToken": "GitHub Token",
+  "chunkmap.config.githubToken.tooltip": "Optional. Personal Access Token (Issues: Read and Write) to submit feedback in-game. Leave blank to use the built-in default or copy manually.",
+  "chunkmap.config.githubToken.hint": "Stored locally in config/chunkmap.json. Revoke anytime at github.com/settings/tokens.",
+
   "chunkmap.config.renderThreads": "Render Threads",
   "chunkmap.config.renderThreads.tooltip": "Number of worker threads for tile rendering. Changes apply immediately after reload.",
   "chunkmap.config.logRetentionDays": "Log Retention (Days)",
@@ -27,5 +32,5 @@
   "chunkmap.config.logRetentionDays.tooltip": "Auto-delete logs older than this many days. 0 = never.",
 
   "chunkmap.config.about.version": "Version: %s",
-  "chunkmap.config.about.hint": "Alt+M to open this screen. M to open the map. Click 'Feedback' in the map for logs."
+  "chunkmap.config.about.hint": "Alt+M to open this screen. M to open the map. Map buttons: Star / Feedback / Logs / Export."
 }

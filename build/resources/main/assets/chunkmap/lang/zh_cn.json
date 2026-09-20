@@ -4,6 +4,7 @@
 
   "chunkmap.config.title": "ChunkMap 配置",
   "chunkmap.config.category.general": "通用",
+  "chunkmap.config.category.feedback": "反馈",
   "chunkmap.config.category.performance": "性能",
   "chunkmap.config.category.about": "关于",
 
@@ -20,6 +21,10 @@
   "chunkmap.config.deleteOnUnload": "卸载时删除瓦片",
   "chunkmap.config.deleteOnUnload.tooltip": "区块卸载时删除对应瓦片文件。节省磁盘但丢失历史。",
 
+  "chunkmap.config.githubToken": "GitHub Token",
+  "chunkmap.config.githubToken.tooltip": "可选。你的 Personal Access Token（Issues 读写权限），填上后可在游戏内直接提交反馈；留空则使用内置默认值或手动复制。",
+  "chunkmap.config.githubToken.hint": "保存在本地 config/chunkmap.json，可随时在 github.com/settings/tokens 撤销。",
+
   "chunkmap.config.renderThreads": "渲染线程数",
   "chunkmap.config.renderThreads.tooltip": "瓦片渲染的工作线程数量，重载配置后立即生效。",
   "chunkmap.config.logRetentionDays": "日志保留天数",
@@ -27,5 +32,5 @@
   "chunkmap.config.logRetentionDays.tooltip": "自动删除超过天数的日志。0 = 永久保留。",
 
   "chunkmap.config.about.version": "版本：%s",
-  "chunkmap.config.about.hint": "Alt+M 打开此界面，M 打开地图。地图里点“反馈”可查看日志。"
+  "chunkmap.config.about.hint": "Alt+M 打开此界面，M 打开地图。地图右上角按钮：Star / 反馈 / 日志 / 导出。"
 }
