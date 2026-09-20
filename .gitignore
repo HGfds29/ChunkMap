@@ -1,7 +1,6 @@
 # ========== 构建输出产物（必须忽略）==========
 out/
 *.class
-*.jar
 !src/main/resources/*.jar
 ChunkMapReleases/
 build/
