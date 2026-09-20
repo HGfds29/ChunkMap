@@ -1,96 +1,171 @@
 # ChunkMap
 
-> 客户端侧 Minecraft Fabric 模组：实时把周围区块渲染成一张俯视地图。
+> 为 Minecraft Fabric 客户端打造的俯视区块地图渲染器。实时快照、多线程渲染、支持 PNG 导出。
 
-[![GitHub](https://img.shields.io/badge/GitHub-HGfds29%2FChunkMap-181717?logo=github)](https://github.com/HGfds29/ChunkMap)
-[![Minecraft](https://img.shields.io/badge/Minecraft-1.21.11-62B47A)](https://www.minecraft.net/)
-[![Fabric](https://img.shields.io/badge/Fabric-0.18.0%2B-DBB69C)](https://fabricmc.net/)
+[![License](https://img.shields.io/github/license/HGfds29/ChunkMap?style=flat-square)](https://github.com/HGfds29/ChunkMap/blob/main/LICENSE)
+[![Release](https://img.shields.io/github/v/release/HGfds29/ChunkMap?style=flat-square&include_prereleases)](https://github.com/HGfds29/ChunkMap/releases)
+[![Issues](https://img.shields.io/github/issues/HGfds29/ChunkMap?style=flat-square)](https://github.com/HGfds29/ChunkMap/issues)
+[![Stars](https://img.shields.io/github/stars/HGfds29/ChunkMap?style=flat-square)](https://github.com/HGfds29/ChunkMap/stargazers)
+[![Last Commit](https://img.shields.io/github/last-commit/HGfds29/ChunkMap?style=flat-square)](https://github.com/HGfds29/ChunkMap/commits/main)
+[![Code Size](https://img.shields.io/github/languages/code-size/HGfds29/ChunkMap?style=flat-square)](https://github.com/HGfds29/ChunkMap)
 
-## ✨ 特性
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.21.11-62B47A?style=flat-square)](https://www.minecraft.net/)
+[![Fabric Loader](https://img.shields.io/badge/Fabric_Loader-%3E%3D0.18.0-DBB69B?style=flat-square)](https://fabricmc.net/)
+[![Java](https://img.shields.io/badge/Java-%3E%3D21-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://adoptium.net/)
 
-- 🗺️ 实时俯视地图：`M` 键随时开图，`Alt + M` 打开配置
-- 🎨 双颜色模式：原版地图色 / 纹理平均色
-- ⛰️ 方向性光照：山脊亮、坡谷暗，可选绝对高度明暗
-- 💾 自动导出：每个区块实时导出 PNG 瓦片，可一键拼接大图
-- 📋 内置反馈与日志面板：地图右上角 `反馈` / `日志` 两个按钮
-- ⭐ 一键 Star：地图右上角金色 `★ Star` 按钮直达仓库
-- ⚙️ 全部配置热重载：改完按 `R` 立刻生效
-- 🔧 分辨率三档可选：`16×16` / `32×32` / `64×64`
+---
 
-## 📦 安装
+## 简介
 
-1. 安装 [Fabric Loader](https://fabricmc.net/) `0.18.0+`
-2. 安装 [Fabric API](https://modrinth.com/mod/fabric-api)
-3. 将 `chunkmap-x.x.x.jar` 放入 `.minecraft/mods/`
-4. 可选：[Cloth Config](https://modrinth.com/mod/cloth-config)、[Mod Menu](https://modrinth.com/mod/modmenu)
+ChunkMap 是一个纯客户端 Fabric 模组，用于在游戏内实时查看并导出你探索过的区块俯视图。它通过 Mixin 监听区块变化，将每个区块顶部方块的颜色渲染为瓦片，并保存在内存缓存中，最终拼合成一张可缩放、可平移的地图。
 
-## ⌨️ 快捷键
+地图数据同时写入磁盘，支持一键导出为单张 PNG 大图，方便分享或制作宣传素材。
 
-| 快捷键 | 功能 |
-|---|---|
-| `M` | 打开 / 关闭地图界面 |
+---
+
+## 特性
+
+- **实时渲染**：区块加载或方块变化时自动重新渲染，无需手动刷新。
+- **多线程工作池**：渲染任务在工作线程执行，主线程仅负责快照读取，最大程度减少卡顿。
+- **双颜色模式**：
+  - `MAP_COLOR`：基于原版 `MapColor`，配合饱和度与明度微调，观感接近原版地图。
+  - `TEXTURE_AVERAGE`：基于方块粒子图标的纹理平均色，色彩更接近真实材质。
+- **高度明暗**：根据地形坡度与海拔高度施加方向性光照，突出山脊与谷地。
+- **可调瓦片分辨率**：16 / 32 / 64 三档，兼顾清晰度与性能。
+- **PNG 导出**：将已渲染瓦片按区块坐标拼合成单张大图，附带网格底纹。
+- **游戏内反馈**：内置反馈界面，可自动附上日志、系统信息、模组列表与配置文件，一键提交 Issue。
+- **日志查看器**：内置日志浏览界面，支持滚动、复制与打开目录。
+- **ModMenu 集成**：通过 ModMenu 或 `Alt + M` 打开图形化配置界面。
+
+---
+
+## 环境要求
+
+| 项目 | 版本 |
+| --- | --- |
+| Minecraft | 1.21.11 |
+| Fabric Loader | >= 0.18.0 |
+| Fabric API | 任意 |
+| Java | >= 21 |
+| 可选：Cloth Config | >= 21.11.0 |
+| 可选：ModMenu | >= 17.0.0 |
+
+> 模组仅需在客户端安装。服务器无需安装，也不会向服务器发送任何额外数据。
+
+---
+
+## 安装
+
+1. 安装 [Fabric Loader](https://fabricmc.net/use/)。
+2. 将 [Fabric API](https://modrinth.com/mod/fabric-api) 放入 `mods` 文件夹。
+3. 从 [Releases](https://github.com/HGfds29/ChunkMap/releases) 下载最新的 `chunkmap-x.x.x.jar`，放入 `mods` 文件夹。
+4. （推荐）安装 [ModMenu](https://modrinth.com/mod/modmenu) 与 [Cloth Config](https://modrinth.com/mod/cloth-config) 以使用图形化配置界面。
+
+---
+
+## 使用
+
+| 操作 | 说明 |
+| --- | --- |
+| `M` | 打开区块地图 |
 | `Alt + M` | 打开配置界面 |
-| `E`（地图内） | 导出拼接大图 |
-| `C`（地图内） | 视角回到玩家 |
-| `Z`（地图内） | 缩放重置 1:1 |
-| `R`（地图内） | 热重载配置 + 重渲染 |
-| `C`（日志内） | 复制全部日志 |
-| `R` / `F5`（日志内） | 刷新日志 |
+| 滚轮 | 缩放地图 |
+| 拖拽 | 平移地图 |
+| `E` | 导出当前维度瓦片为单张 PNG |
+| `C` | 地图视图回到玩家位置 |
+| `Z` | 缩放复位至 1:1 |
+| `R` | 重载配置并刷新缓存 |
+| `ESC` | 关闭界面 |
 
-## ⚙️ 配置
+---
 
-配置文件：`config/chunkmap.json`
+## 配置
 
-| 字段 | 说明 |
-|---|---|
-| `tileResolution` | `16` / `32` / `64`，像素边长 |
-| `outputDir` | 瓦片输出根目录 |
-| `colorMode` | `MAP_COLOR` / `TEXTURE_AVERAGE` |
-| `shadeByHeight` | 是否施加高度明暗 |
-| `uiAnimation` | UI 平滑动画开关 |
-| `deleteOnUnload` | 卸载时删除瓦片 |
-| `renderThreads` | 渲染线程数（1~8） |
-| `logRetentionDays` | 日志保留天数（0 = 永久） |
-| `githubToken` | 反馈提交用 PAT（可选，覆盖内置 DevToken） |
+配置文件位于 `.minecraft/config/chunkmap.json`，首次启动时自动生成。
 
-## 📝 反馈
+| 字段 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `tileResolution` | int | `32` | 瓦片边长（像素），可选 16 / 32 / 64 |
+| `outputDir` | string | `chunkmap-output` | 瓦片与导出图的相对输出目录 |
+| `colorMode` | enum | `MAP_COLOR` | 颜色模式：`MAP_COLOR` / `TEXTURE_AVERAGE` |
+| `shadeByHeight` | bool | `true` | 是否根据高度施加明暗 |
+| `uiAnimation` | bool | `true` | 是否启用 UI 过渡动画 |
+| `deleteOnUnload` | bool | `false` | 区块卸载时是否删除对应瓦片文件 |
+| `renderThreads` | int | `2` | 渲染工作线程数，范围 1 - 8 |
+| `logRetentionDays` | int | `7` | 日志保留天数，`0` 表示永久保留 |
+| `githubToken` | string | `""` | 用于游戏内提交 Issue，可留空手动提交 |
 
-- 地图内点 **反馈** → 输入内容 → 提交到 GitHub Issues
-- 每日一次限制：24 小时内不能重复提交
-- 无 token 时点 **打开 Issues** 会复制内容到剪贴板并打开网页，手动粘贴即可
-- **日志** 按钮打开只读日志查看器，可按级别着色、复制全部
+---
 
-### 关于 githubToken
-
-模组在 `DevToken.java` 里内置了一个默认 token（用于开箱即用）。如果要换成你自己的：
-
-1. 去 [github.com/settings/tokens](https://github.com/settings/tokens) 生成 fine-grained token，权限只需 **Issues: Read and Write**
-2. 打开 `Alt + M` → **反馈** 分类，粘贴到 `GitHub Token` 字段
-3. 或直接改 `config/chunkmap.json` 的 `githubToken`
-
-⚠ **内置 token 是可被反编译 jar 提取的**。它权限很低（仅能发 issue），但请定期轮换；如果发现滥用，立即到 GitHub 撤销。
-
-## 📂 输出目录结构
+## 输出结构
 
 ```
 chunkmap-output/
 ├── minecraft/
 │   ├── overworld/
 │   │   ├── 0_0.png
-│   │   └── 1_-2.png
-│   └── the_nether/
-│       └── 0_0.png
+│   │   ├── 1_0.png
+│   │   └── ...
+│   ├── the_nether/
+│   └── the_end/
 └── stitched/
-    └── overworld_20240101_120000.png
+    └── overworld_20260101_120000.png
 ```
 
-## 🔨 构建
+- 瓦片文件命名格式为 `<chunkX>_<chunkZ>.png`，坐标与 Minecraft 区块坐标一致。
+- `stitched` 目录存放导出的拼接大图，文件名附带时间戳。
+
+---
+
+## 从源码构建
 
 ```bash
+git clone https://github.com/HGfds29/ChunkMap.git
+cd ChunkMap
 ./gradlew build
-# 产物：build/libs/chunkmap-<version>.jar
 ```
 
-## 📄 License
+构建产物位于 `build/libs/` 目录下。
 
-MIT
+开发环境运行：
+
+```bash
+./gradlew runClient
+```
+
+---
+
+## 项目结构
+
+```
+src/main/java/com/geek/chunkmap/
+├── ChunkMapMod.java            模组入口
+├── config/                     配置加载与数据模型
+├── event/                      客户端事件与脏区块追踪
+├── mixin/                      Mixin 注入
+├── render/                     快照、调色板与俯视渲染器
+├── tile/                       瓦片缓存、调度、存储与拼接
+├── ui/                         地图、配置、反馈与日志界面
+└── util/                       日志工具
+```
+
+---
+
+## 反馈与贡献
+
+- Bug 报告或功能建议请通过 [Issues](https://github.com/HGfds29/ChunkMap/issues) 提交。
+- 游戏内可在反馈界面一键提交，自动附带版本、日志、系统信息与模组列表。
+- 欢迎提交 Pull Request，请保持代码风格一致并附带必要的说明。
+
+---
+
+## 许可证
+
+本项目使用 [MIT License](https://github.com/HGfds29/ChunkMap/blob/main/LICENSE) 授权。
+
+---
+
+## 致谢
+
+- [Fabric](https://fabricmc.net/) 提供模组加载框架
+- [Cloth Config](https://github.com/shedaniel/cloth-config) 与 [ModMenu](https://github.com/TerraformersMC/ModMenu) 提供配置界面支持
