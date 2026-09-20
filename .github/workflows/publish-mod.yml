@@ -1,10 +1,9 @@
 name: Build & Release (SLSA3)
-
 on:
   push:
     tags:
-      - '1.0.0.0-beta.*' # 匹配你的beta版本tag
-  workflow_dispatch: # 支持手动触发
+      - '1.0.0.0-beta.*' # beta标签触发
+  workflow_dispatch: # 手动触发
 
 permissions:
   contents: write
@@ -39,15 +38,20 @@ jobs:
           name: mod-jar
           path: build/libs/*.jar
 
+      # 拿到jar文件列表，解决attest不支持通配符问题
+      - name: Get jar path
+        id: jar_file
+        run: echo "path=$(ls build/libs/*.jar)" >> $GITHUB_OUTPUT
+
       - name: Generate SLSA3 Artifact Attestation
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: build/libs/*.jar
+          subject-path: ${{ steps.jar_file.outputs.path }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          prerelease: true # beta版本默认Pre-release，正式版改成false
+          prerelease: true
           files: build/libs/*.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
