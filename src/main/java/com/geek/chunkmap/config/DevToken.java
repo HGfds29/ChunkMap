@@ -15,7 +15,7 @@ package com.geek.chunkmap.config;
  */
 public final class DevToken {
     /** 把下面引号里的内容替换成你新生成的 token。 */
-    public static final String VALUE = "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";
+    public static final String VALUE = "";
 
     private DevToken() {}
 }

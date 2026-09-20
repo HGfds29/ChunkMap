@@ -10,6 +10,9 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.MalformedInputException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -93,7 +96,15 @@ public class LogViewerScreen extends Screen {
             return;
         }
         try {
-            List<String> raw = Files.readAllLines(path);
+            List<String> raw;
+            try {
+                // 优先使用 UTF-8 读取（与 FileLogger 的写入编码一致）
+                raw = Files.readAllLines(path, StandardCharsets.UTF_8);
+            } catch (MalformedInputException e) {
+                // 兼容旧版本用 GBK 写入的日志
+                raw = Files.readAllLines(path, Charset.forName("GBK"));
+            }
+
             int from = Math.max(0, raw.size() - MAX_LINES);
             FileLogger.Level last = FileLogger.Level.INFO;
             for (int i = from; i < raw.size(); i++) {

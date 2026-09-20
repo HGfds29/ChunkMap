@@ -1,8 +1,10 @@
 package com.geek.chunkmap.util;
 
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -54,7 +56,11 @@ public class FileLogger {
                 Files.createDirectories(logDir);
                 String name = "chunkmap_" + LocalDateTime.now().format(NAME_FMT) + ".log";
                 currentFile = logDir.resolve(name);
-                writer = new FileWriter(currentFile.toFile(), true);
+                // 明确使用 UTF-8 编码写入，避免系统默认编码（如 GBK）导致读取失败
+                writer = new OutputStreamWriter(
+                        new FileOutputStream(currentFile.toFile(), true),
+                        StandardCharsets.UTF_8
+                );
             } catch (IOException e) {
                 System.err.println("[ChunkMap] 无法初始化日志文件: " + e.getMessage());
             }
