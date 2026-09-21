@@ -14,7 +14,7 @@ package com.geek.chunkmap.config;
  *   2. DevToken.VALUE（本文件）
  */
 public final class DevToken {
-    /** 把下面引号里的内容替换成你新生成的 token。 */
+    /** 把下面引号里的内容替换生成的 token。 */
     public static final String VALUE = "";
 
     private DevToken() {}

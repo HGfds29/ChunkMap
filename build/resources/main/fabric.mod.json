@@ -1,39 +1,39 @@
 {
-"schemaVersion": 1,
-"id": "chunkmap",
-"version": "1.0.0.0-beta.4+1.21.11",
-"name": "ChunkMap",
-"description": "俯视区块地图渲染器",
-"authors": [
-"geek"
-],
-"contact": {},
-"license": "MIT",
-"icon": "assets/chunkmap/icon.png",
-"environment": "client",
+  "schemaVersion": 1,
+  "id": "chunkmap",
+  "version": "1.0.0.0-beta.4+1.21.11",
+  "name": "ChunkMap",
+  "description": "俯视区块地图渲染器",
+  "authors": [
+    "geek"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/chunkmap/icon.png",
+  "environment": "client",
 
-"entrypoints": {
-"client": [
-"com.geek.chunkmap.ChunkMapMod"
-],
-"modmenu": [
-"com.geek.chunkmap.ui.ConfigurationScreen"
-]
-},
+  "entrypoints": {
+    "client": [
+      "com.geek.chunkmap.ChunkMapMod"
+    ],
+    "modmenu": [
+      "com.geek.chunkmap.ui.ModMenuIntegration"
+    ]
+  },
 
-"mixins": [
-"chunkmap.mixins.json"
-],
+  "mixins": [
+    "chunkmap.mixins.json"
+  ],
 
-"depends": {
-"fabricloader": ">=0.18.0",
-"fabric-api": "*",
-"minecraft": "~1.21.11",
-"java": ">=21"
-},
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "cloth-config": ">=21.11.0"
+  },
 
-"suggests": {
-"cloth-config": ">=21.11.0",
-"modmenu": ">=17.0.0"
-}
+  "suggests": {
+    "modmenu": ">=17.0.0"
+  }
 }

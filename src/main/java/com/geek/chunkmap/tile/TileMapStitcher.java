@@ -48,7 +48,18 @@ public final class TileMapStitcher {
                     int x = Integer.parseInt(name.substring(0, us));
                     int z = Integer.parseInt(name.substring(us + 1, dot));
                     ChunkPos pos = new ChunkPos(x, z);
-                    tiles.put(pos, ImageIO.read(p.toFile()));
+
+                    BufferedImage img = ImageIO.read(p.toFile());
+                    if (img == null) {
+                        // 文件损坏/格式不支持，跳过
+                        continue;
+                    }
+                    // 尺寸不匹配的也跳过，防止越界写入
+                    if (img.getWidth() != tileRes || img.getHeight() != tileRes) {
+                        continue;
+                    }
+
+                    tiles.put(pos, img);
                     minX = Math.min(minX, x); minZ = Math.min(minZ, z);
                     maxX = Math.max(maxX, x); maxZ = Math.max(maxZ, z);
                 } catch (NumberFormatException ignored) {
@@ -68,8 +79,6 @@ public final class TileMapStitcher {
         BufferedImage canvas = new BufferedImage(cols * tileRes, rows * tileRes, BufferedImage.TYPE_INT_ARGB);
 
         Graphics2D g = canvas.createGraphics();
-        // 注意：new Color(int, boolean) 的 int 参数按 0xAARRGGBB 解释。
-        // 直接写 0xB0B0B0 会得到 alpha=0 的全透明色，必须显式补上 0xFF。
         g.setColor(new Color(0xFFB0B0B0, true));
         g.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
         g.setColor(new Color(0xFF9E9E9E, true));

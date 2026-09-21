@@ -207,10 +207,22 @@ public class RenderDispatcher {
             final TileStorage st = this.storage;
             final Path out = st.tilePath(snap.dim(), snap.pos());
             final int[] px = pixels;
+            final ChunkPos pos = snap.pos();
+            final FileLogger lg = this.logger;
             ioExecutor.submit(() -> {
                 try {
                     TilePngWriter.write(px, res, res, out);
-                } catch (IOException ignored) {}
+                } catch (IOException e) {
+                    // 不再静默吞掉，记录到日志
+                    if (lg != null) {
+                        lg.error("[IO] 写入瓦片失败 " + pos + " → " + out
+                                + ": " + e.getMessage(), e);
+                    }
+                } catch (Throwable t) {
+                    if (lg != null) {
+                        lg.error("[IO] 写入瓦片异常 " + pos + ": " + t.getMessage(), t);
+                    }
+                }
             });
 
             renderedCount.incrementAndGet();

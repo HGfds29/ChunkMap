@@ -3,20 +3,13 @@ package com.geek.chunkmap.ui;
 import com.geek.chunkmap.ChunkMapMod;
 import com.geek.chunkmap.config.ConfigLoader;
 import com.geek.chunkmap.config.TileMapConfig;
-import com.terraformersmc.modmenu.api.ConfigScreenFactory;
-import com.terraformersmc.modmenu.api.ModMenuApi;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-public class ConfigurationScreen implements ModMenuApi {
-
-    @Override
-    public ConfigScreenFactory<?> getModConfigScreenFactory() {
-        return ConfigurationScreen::createConfigScreen;
-    }
+public class ConfigurationScreen {
 
     public static Screen createConfigScreen(Screen parent) {
         TileMapConfig current = ConfigLoader.load();
@@ -25,7 +18,7 @@ public class ConfigurationScreen implements ModMenuApi {
         ConfigBuilder builder = ConfigBuilder.create()
                 .setParentScreen(parent)
                 .setTitle(Component.translatable("chunkmap.config.title"))
-                .setSavingRunnable(() -> ConfigLoader.save(holder.toRecord()));
+                .setSavingRunnable(() -> ConfigLoader.save(holder.toRecord().validated()));
 
         ConfigEntryBuilder e = builder.entryBuilder();
 
