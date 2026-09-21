@@ -19,8 +19,13 @@ public class ChunkSnapshotter {
     public void setLogger(FileLogger logger) { this.logger = logger; }
 
     public ChunkSnapshot snapshot(ClientLevel level, ChunkPos pos) {
-        if (level == null || !level.hasChunk(pos.x, pos.z)) return null;
+        if (level == null || !level.hasChunk(pos.x, pos.z)) {
+            if (logger != null && logger.isEnabled(FileLogger.Level.TRACE))
+                logger.trace("[Snapshot] 无区块 " + pos);
+            return null;
+        }
 
+        long t0 = System.nanoTime();
         LevelChunk chunk = level.getChunk(pos.x, pos.z);
         int[] colors = new int[ChunkSnapshot.COLUMNS];
         int[] ys = new int[ChunkSnapshot.COLUMNS];
@@ -28,11 +33,13 @@ public class ChunkSnapshotter {
         int baseZ = pos.getMinBlockZ();
         int minY = level.getMinY();
 
-        // 用 LevelChunk 自带的本地高度图（客户端根据收到的方块数据算），
-        // 避免逐层扫描 384 层，快 ~300 倍。
         Heightmap surface = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE);
 
         int emptyCols = 0;
+        int nonEmpty = 0;
+        int maxY = Integer.MIN_VALUE;
+        int minSurfaceY = Integer.MAX_VALUE;
+
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 int idx = z * 16 + x;
@@ -48,11 +55,21 @@ public class ChunkSnapshotter {
                 BlockState st = chunk.getBlockState(bpos);
                 colors[idx] = palette.getColor(st, level, bpos);
                 ys[idx] = topY;
+                nonEmpty++;
+                if (topY > maxY) maxY = topY;
+                if (topY < minSurfaceY) minSurfaceY = topY;
             }
         }
 
         if (logger != null) {
-            logger.trace("[Snapshot] " + pos + " minY=" + minY + " 空列=" + emptyCols);
+            logger.count("snapshot.created");
+            if (logger.isEnabled(FileLogger.Level.TRACE)) {
+                long ms = (System.nanoTime() - t0) / 1_000_000;
+                logger.trace("[Snapshot] " + pos + " minY=" + minY
+                        + " 空列=" + emptyCols + " 非空=" + nonEmpty
+                        + " 顶Y范围=[" + minSurfaceY + "," + maxY + "]"
+                        + " 耗时=" + ms + "ms");
+            }
         }
 
         return new ChunkSnapshot(pos, level.dimension(), colors, ys);

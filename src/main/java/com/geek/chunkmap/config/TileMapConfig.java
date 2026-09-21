@@ -9,13 +9,31 @@ public record TileMapConfig(
         boolean deleteOnUnload,
         int renderThreads,
         int logRetentionDays,
-        String githubToken
+        String githubToken,
+        // ---- 调试基础 ----
+        boolean debugMode,
+        LogLevel debugLogLevel,
+        boolean debugOverlay,
+        // ---- 调试视觉 ----
+        boolean debugShowChunkBorders,
+        boolean debugShowTileCoords,
+        boolean debugShowPlayerChunk,
+        boolean debugShowOrigin,
+        boolean debugShowHighlight,
+        boolean debugNoGrid,
+        boolean debugWireframe,
+        // ---- 调试信息 ----
+        boolean debugShowFps,
+        boolean debugShowMemory,
+        boolean debugShowQueue,
+        boolean debugShowTimings,
+        // ---- 调试行为 ----
+        boolean debugForceRebuild
 ) {
     public enum ColorMode { MAP_COLOR, TEXTURE_AVERAGE }
 
-    /**
-     * 瓦片分辨率：只允许 16 / 32 / 64 三档。
-     */
+    public enum LogLevel { TRACE, DEBUG, INFO, WARN, ERROR, OFF }
+
     public enum Resolution {
         R16(16), R32(32), R64(64);
 
@@ -45,7 +63,13 @@ public record TileMapConfig(
                 false,
                 2,
                 7,
-                ""
+                "",
+                false,
+                LogLevel.INFO,
+                false,
+                false, false, false, false, false, false, false,
+                false, false, false, false,
+                false
         );
     }
 
@@ -57,7 +81,24 @@ public record TileMapConfig(
         String dir = (outputDir == null || outputDir.isBlank()) ? "chunkmap-output" : outputDir;
         ColorMode mode = colorMode != null ? colorMode : ColorMode.MAP_COLOR;
         String token = githubToken == null ? "" : githubToken.trim();
+        LogLevel dlv = debugLogLevel != null ? debugLogLevel : LogLevel.INFO;
         return new TileMapConfig(res, dir, mode, shadeByHeight, uiAnimation,
-                deleteOnUnload, threads, retention, token);
+                deleteOnUnload, threads, retention, token,
+                debugMode, dlv, debugOverlay,
+                debugShowChunkBorders, debugShowTileCoords, debugShowPlayerChunk,
+                debugShowOrigin, debugShowHighlight, debugNoGrid, debugWireframe,
+                debugShowFps, debugShowMemory, debugShowQueue, debugShowTimings,
+                debugForceRebuild);
+    }
+
+    /** ★ 关键方法：只改 debugMode / debugLogLevel，其余全部保留。 */
+    public TileMapConfig withDebug(boolean enabled, LogLevel level) {
+        return new TileMapConfig(tileResolution, outputDir, colorMode, shadeByHeight,
+                uiAnimation, deleteOnUnload, renderThreads, logRetentionDays, githubToken,
+                enabled, level, debugOverlay,
+                debugShowChunkBorders, debugShowTileCoords, debugShowPlayerChunk,
+                debugShowOrigin, debugShowHighlight, debugNoGrid, debugWireframe,
+                debugShowFps, debugShowMemory, debugShowQueue, debugShowTimings,
+                debugForceRebuild);
     }
 }

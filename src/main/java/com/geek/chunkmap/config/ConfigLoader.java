@@ -1,5 +1,7 @@
 package com.geek.chunkmap.config;
 
+import com.geek.chunkmap.ChunkMapMod;
+import com.geek.chunkmap.util.FileLogger;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -18,28 +20,39 @@ public class ConfigLoader {
     }
 
     public static TileMapConfig load() {
+        FileLogger lg = ChunkMapMod.getLogger();
         Path path = configPath();
         boolean exists = Files.exists(path);
+
+        if (lg != null) {
+            lg.info("[Config] load path=" + path.toAbsolutePath()
+                    + " exists=" + exists);
+        }
 
         if (exists) {
             try (Reader r = Files.newBufferedReader(path)) {
                 JsonObject obj = GSON.fromJson(r, JsonObject.class);
                 if (obj != null) {
-                    return fromJson(obj).validated();
+                    TileMapConfig c = fromJson(obj).validated();
+                    if (lg != null) lg.info("[Config] 加载成功: " + c);
+                    return c;
                 }
             } catch (Exception e) {
-                System.err.println("[ChunkMap] 配置读取失败，使用默认值: " + e.getMessage());
+                if (lg != null) lg.error("[Config] 读取失败，使用默认值", e);
+                else System.err.println("[ChunkMap] 配置读取失败: " + e.getMessage());
             }
         }
 
         TileMapConfig def = TileMapConfig.defaults();
         if (!exists) {
+            if (lg != null) lg.info("[Config] 首次运行，写入默认配置");
             save(def);
         }
         return def;
     }
 
     public static void save(TileMapConfig config) {
+        FileLogger lg = ChunkMapMod.getLogger();
         Path path = configPath();
         try {
             Files.createDirectories(path.getParent());
@@ -47,8 +60,10 @@ public class ConfigLoader {
             try (Writer w = Files.newBufferedWriter(path)) {
                 GSON.toJson(obj, w);
             }
+            if (lg != null) lg.info("[Config] 保存成功: " + path.toAbsolutePath());
         } catch (IOException e) {
-            System.err.println("[ChunkMap] 配置保存失败: " + e.getMessage());
+            if (lg != null) lg.error("[Config] 保存失败", e);
+            else System.err.println("[ChunkMap] 配置保存失败: " + e.getMessage());
         }
     }
 
@@ -62,7 +77,23 @@ public class ConfigLoader {
                 getBool(o, "deleteOnUnload", false),
                 getInt(o, "renderThreads", 2),
                 getInt(o, "logRetentionDays", 7),
-                getString(o, "githubToken", "")
+                getString(o, "githubToken", ""),
+                getBool(o, "debugMode", false),
+                getLogLevel(o),
+                getBool(o, "debugOverlay", false),
+                // 新增调试开关
+                getBool(o, "debugShowChunkBorders", false),
+                getBool(o, "debugShowTileCoords", false),
+                getBool(o, "debugShowPlayerChunk", false),
+                getBool(o, "debugShowOrigin", false),
+                getBool(o, "debugShowHighlight", false),
+                getBool(o, "debugNoGrid", false),
+                getBool(o, "debugWireframe", false),
+                getBool(o, "debugShowFps", false),
+                getBool(o, "debugShowMemory", false),
+                getBool(o, "debugShowQueue", false),
+                getBool(o, "debugShowTimings", false),
+                getBool(o, "debugForceRebuild", false)
         );
     }
 
@@ -85,6 +116,16 @@ public class ConfigLoader {
         }
     }
 
+    private static TileMapConfig.LogLevel getLogLevel(JsonObject o) {
+        try {
+            return o.has("debugLogLevel")
+                    ? TileMapConfig.LogLevel.valueOf(o.get("debugLogLevel").getAsString())
+                    : TileMapConfig.LogLevel.INFO;
+        } catch (Exception e) {
+            return TileMapConfig.LogLevel.INFO;
+        }
+    }
+
     private static JsonObject toJson(TileMapConfig c) {
         JsonObject o = new JsonObject();
         o.addProperty("tileResolution", c.tileResolution());
@@ -96,6 +137,22 @@ public class ConfigLoader {
         o.addProperty("renderThreads", c.renderThreads());
         o.addProperty("logRetentionDays", c.logRetentionDays());
         o.addProperty("githubToken", c.githubToken());
+        o.addProperty("debugMode", c.debugMode());
+        o.addProperty("debugLogLevel", c.debugLogLevel().name());
+        o.addProperty("debugOverlay", c.debugOverlay());
+        // 新增调试开关
+        o.addProperty("debugShowChunkBorders", c.debugShowChunkBorders());
+        o.addProperty("debugShowTileCoords", c.debugShowTileCoords());
+        o.addProperty("debugShowPlayerChunk", c.debugShowPlayerChunk());
+        o.addProperty("debugShowOrigin", c.debugShowOrigin());
+        o.addProperty("debugShowHighlight", c.debugShowHighlight());
+        o.addProperty("debugNoGrid", c.debugNoGrid());
+        o.addProperty("debugWireframe", c.debugWireframe());
+        o.addProperty("debugShowFps", c.debugShowFps());
+        o.addProperty("debugShowMemory", c.debugShowMemory());
+        o.addProperty("debugShowQueue", c.debugShowQueue());
+        o.addProperty("debugShowTimings", c.debugShowTimings());
+        o.addProperty("debugForceRebuild", c.debugForceRebuild());
         return o;
     }
 }

@@ -1,11 +1,13 @@
 package com.geek.chunkmap.ui;
 
 import com.geek.chunkmap.ChunkMapMod;
+import com.geek.chunkmap.config.TileMapConfig;
 import com.geek.chunkmap.tile.TileMapCache;
 import com.geek.chunkmap.tile.TileMapStitcher;
 import com.geek.chunkmap.util.FileLogger;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.NativeImage;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
@@ -97,6 +99,9 @@ public class ChunkMapScreen extends Screen {
 
     private boolean pendingReload = false;
 
+    /** 最近一次纹理重建耗时（ms），调试覆盖层使用。 */
+    private long lastRebuildMillis = 0;
+
     private final List<Btn> buttons = new ArrayList<>();
     private Btn btnExport, btnClose, btnFeedback, btnLogs, btnStar;
 
@@ -106,6 +111,24 @@ public class ChunkMapScreen extends Screen {
         super(Component.literal("ChunkMap"));
         this.cache = cache;
         this.logger = logger;
+    }
+
+    // ---------- 小工具：安全打日志 ----------
+
+    private void logInfo(String msg) {
+        if (logger != null) logger.info(msg);
+    }
+
+    private void logDebug(String msg) {
+        if (logger != null && logger.isEnabled(FileLogger.Level.DEBUG)) logger.debug(msg);
+    }
+
+    private void logTrace(String msg) {
+        if (logger != null && logger.isEnabled(FileLogger.Level.TRACE)) logger.trace(msg);
+    }
+
+    private void count(String key) {
+        if (logger != null) logger.count(key);
     }
 
     @Override
@@ -121,9 +144,19 @@ public class ChunkMapScreen extends Screen {
         return c != null ? c.outputDir() : "chunkmap-output";
     }
 
+    /**
+     * 取消边界：不再有固定的最大半径。
+     * 以“最小缩放时恰好覆盖全屏”为基准计算 radius，
+     * 并以 NativeImage 8192px 边长为硬上限防止 OOM。
+     */
     private void recomputeLayout() {
-        int baseRadius = (int) Math.ceil(Math.max(width, height) / 2.0 / tileRes) + 2;
-        radius = Math.max(1, Math.min(baseRadius, 32));
+        double minCellPx = Math.max(1.0, tileRes * MIN_ZOOM);
+        int baseRadius = (int) Math.ceil(Math.max(width, height) / 2.0 / minCellPx) + 2;
+
+        // NativeImage 安全上限：纹理边长 ≤ 8192 px
+        int maxRadius = Math.max(1, 8192 / Math.max(1, tileRes) / 2 - 1);
+
+        radius = Math.max(1, Math.min(baseRadius, maxRadius));
     }
 
     @Override
@@ -146,10 +179,10 @@ public class ChunkMapScreen extends Screen {
 
         layoutButtons();
 
-        if (logger != null) {
-            logger.info("[UI] 打开 map screen=" + width + "x" + height
-                    + " tileRes=" + tileRes + " radius=" + radius + " uiAnim=" + uiAnim);
-        }
+        logInfo("[UI] 打开地图界面 " + width + "x" + height
+                + " tileRes=" + tileRes + " radius=" + radius
+                + " uiAnim=" + uiAnim + " zoom=" + zoom);
+        count("ui.map.open");
     }
 
     private void layoutButtons() {
@@ -179,22 +212,29 @@ public class ChunkMapScreen extends Screen {
     }
 
     private void openFeedback() {
+        logInfo("[UI] 打开反馈界面");
+        count("ui.feedback.open");
         minecraft.setScreen(new FeedbackScreen(this));
     }
 
     private void openLogs() {
+        logInfo("[UI] 打开日志界面");
+        count("ui.logs.open");
         minecraft.setScreen(new LogViewerScreen(this));
     }
 
     private void openStarPage() {
+        logInfo("[UI] 打开 GitHub Star 页");
+        count("ui.star.click");
         openUrl(ChunkMapMod.GITHUB_URL, "已打开 GitHub，感谢 Star ⭐");
     }
 
     private void openUrl(String url, String okMsg) {
+        logInfo("[UI] 尝试打开 URL: " + url);
         boolean ok = openUri(url);
         if (ok) {
             showExportMsg(okMsg, true);
-            if (logger != null) logger.info("[UI] 打开 URL: " + url);
+            logInfo("[UI] 打开 URL 成功: " + url);
         } else {
             minecraft.keyboardHandler.setClipboard(url);
             showExportMsg("已复制链接到剪贴板: " + url, false);
@@ -202,10 +242,6 @@ public class ChunkMapScreen extends Screen {
         }
     }
 
-    /**
-     * 打开外部 URL。依次尝试 net.minecraft.Util / net.minecraft.util.Util（不同 MC 版本包路径不同），
-     * 都失败则回退到 java.awt.Desktop。返回是否成功。
-     */
     private static boolean openUri(String url) {
         try {
             java.net.URI uri = java.net.URI.create(url);
@@ -237,7 +273,7 @@ public class ChunkMapScreen extends Screen {
         return false;
     }
 
-    @Override
+        @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
         if (pendingReload) {
             pendingReload = false;
@@ -246,6 +282,7 @@ public class ChunkMapScreen extends Screen {
 
         int curRes = currentTileRes();
         if (curRes != tileRes) {
+            logInfo("[UI] tileRes 变化 " + tileRes + " → " + curRes);
             tileRes = curRes;
             recomputeLayout();
             lastTileRes = -1;
@@ -276,6 +313,12 @@ public class ChunkMapScreen extends Screen {
             return;
         }
 
+        var cfg = ChunkMapMod.getConfig();
+        boolean dbg = cfg != null && cfg.debugMode();
+        boolean dbgForceRebuild = dbg && cfg.debugForceRebuild();
+        boolean dbgWireframe    = dbg && cfg.debugWireframe();
+        boolean dbgShowGrid     = !(dbg && cfg.debugNoGrid());
+
         ResourceKey<Level> dim = level.dimension();
         long v = cache.version();
         ChunkPos curChunk = new ChunkPos(player.blockPosition());
@@ -283,20 +326,29 @@ public class ChunkMapScreen extends Screen {
         boolean dimChanged = lastDim == null || !dim.equals(lastDim);
         boolean resChanged = lastTileRes != tileRes;
 
-        if (texture == null || v != lastVersion || movedChunk || dimChanged || resChanged) {
+        if (texture == null || v != lastVersion || movedChunk || dimChanged || resChanged || dbgForceRebuild) {
             lastPlayerChunkX = curChunk.x;
             lastPlayerChunkZ = curChunk.z;
             lastDim = dim;
             lastTileRes = tileRes;
+            long t0 = System.nanoTime();
             rebuildTexture(v, dim);
+            lastRebuildMillis = (System.nanoTime() - t0) / 1_000_000;
         }
 
         if (texture != null) {
-            drawMapBody(g);
-            drawGrid(g);
+            if (!dbgWireframe) drawMapBody(g);
+            if (dbgShowGrid) drawGrid(g);
             drawPlayerMarker(g, player, curChunk);
+
+            // ★ 注意：record 访问器是方法，必须带 ()
+            if (dbg && cfg.debugShowChunkBorders()) drawDebugChunkBorders(g, curChunk);
+            if (dbg && cfg.debugShowPlayerChunk())  drawDebugPlayerChunk(g);
+            if (dbg && cfg.debugShowOrigin())       drawDebugOrigin(g);
+            if (dbg && cfg.debugShowTileCoords())   drawDebugTileCoords(g, curChunk);
+            if (dbg && cfg.debugShowHighlight())    drawDebugHighlight(g, mouseX, mouseY);
         } else {
-            String s = "正在渲染…";
+            String s = dbgWireframe ? "（线框模式：等待数据…）" : "正在渲染…";
             g.drawString(font, s, (width - font.width(s)) / 2, height / 2, C_TEXT_DIM, true);
         }
 
@@ -312,6 +364,10 @@ public class ChunkMapScreen extends Screen {
 
         for (Btn b : buttons) {
             drawButton(g, b, b.contains(mouseX, mouseY), dt, openProgress);
+        }
+
+        if (dbg && cfg.debugOverlay()) {   // ★ 同样加 ()
+            drawDebugOverlay(g, cfg);
         }
     }
 
@@ -559,12 +615,229 @@ public class ChunkMapScreen extends Screen {
         g.drawString(font, b.label, tx, ty, withAlpha(textCol, alpha), false);
     }
 
+    // ==================== 调试绘制 ====================
+
+    private void drawDebugOverlay(GuiGraphics g, TileMapConfig cfg) {
+        List<String> lines = new ArrayList<>();
+        lines.add("§b[DEBUG] §7" + ChunkMapMod.VERSION);
+        lines.add("tileRes=" + tileRes + "  radius=" + radius
+                + "  zoom=" + String.format("%.2f", displayZoom));
+
+        if (cfg.debugShowFps()) {
+            lines.add("FPS: " + Minecraft.getInstance().getFps());
+        }
+        if (cfg.debugShowMemory()) {
+            Runtime rt = Runtime.getRuntime();
+            long used = (rt.totalMemory() - rt.freeMemory()) / 1024 / 1024;
+            long max  = rt.maxMemory() / 1024 / 1024;
+            lines.add("Mem: " + used + " / " + max + " MB");
+        }
+        if (cfg.debugShowQueue()) {
+            var disp = ChunkMapMod.getDispatcher();
+            if (disp != null) {
+                lines.add("queue=" + disp.queueSize()
+                        + "  cache=" + cache.size(lastDim == null ? Level.OVERWORLD : lastDim));
+            }
+        }
+        if (cfg.debugShowTimings()) {
+            lines.add("rebuild: " + lastRebuildMillis + " ms");
+        }
+        if (cfg.debugForceRebuild()) lines.add("§e每帧强制重建");
+        if (cfg.debugWireframe())    lines.add("§e线框模式");
+        if (cfg.debugNoGrid())       lines.add("§e网格已禁用");
+
+        int lineH = 10;
+        int pad = 4;
+        int w = 0;
+        for (String s : lines) w = Math.max(w, font.width(stripColor(s)));
+        w += pad * 2;
+
+        int x = 8;
+        int y = TOPBAR_H + 6;
+        int h = lines.size() * lineH + pad * 2;
+
+        g.fill(x - 2, y - 2, x + w + 2, y + h + 2, 0x50000000);
+        g.fill(x, y, x + w, y + h, 0xC0101317);
+        g.fill(x, y, x + 2, y + h, C_ACCENT);
+
+        int ty = y + pad;
+        for (String s : lines) {
+            g.drawString(font, s, x + pad, ty, C_TEXT, false);
+            ty += lineH;
+        }
+    }
+
+    private void drawDebugChunkBorders(GuiGraphics g, ChunkPos center) {
+        double[] r = computeMapRect();
+        if (r[2] <= 0 || r[3] <= 0) return;
+
+        double cell = tileRes * zoom;
+        if (cell < 4) return;
+
+        g.enableScissor(0, TOPBAR_H, width, height - BOTBAR_H);
+        int top = Math.max(TOPBAR_H, (int) Math.ceil(r[1]));
+        int bot = Math.min(height - BOTBAR_H, (int) Math.floor(r[1] + r[3]));
+        int left = Math.max(0, (int) Math.ceil(r[0]));
+        int right = Math.min(width, (int) Math.floor(r[0] + r[2]));
+        if (top >= bot || left >= right) {
+            g.disableScissor();
+            return;
+        }
+
+        int color = 0x80FF00FF;
+
+        int startI = (int) Math.floor((left - r[0]) / cell);
+        int endI   = (int) Math.ceil((right - r[0]) / cell);
+        for (int i = startI; i <= endI; i++) {
+            int x = (int) Math.round(r[0] + i * cell);
+            if (x < left || x >= right) continue;
+            g.fill(x, top, x + 1, bot, color);
+        }
+
+        int startJ = (int) Math.floor((top - r[1]) / cell);
+        int endJ   = (int) Math.ceil((bot - r[1]) / cell);
+        for (int j = startJ; j <= endJ; j++) {
+            int y = (int) Math.round(r[1] + j * cell);
+            if (y < top || y >= bot) continue;
+            g.fill(left, y, right, y + 1, color);
+        }
+
+        g.disableScissor();
+    }
+
+    /** 玩家所在区块 = 纹理中心瓦片（rebuildTexture 以玩家为中心）。 */
+    private void drawDebugPlayerChunk(GuiGraphics g) {
+        double[] r = computeMapRect();
+        if (r[2] <= 0 || r[3] <= 0) return;
+
+        double cell = tileRes * zoom;
+        if (cell <= 0) return;
+
+        double mapCx = r[0] + r[2] / 2.0;
+        double mapCz = r[1] + r[3] / 2.0;
+
+        double x0 = mapCx - cell / 2.0;
+        double z0 = mapCz - cell / 2.0;
+
+        int ix = (int) Math.round(x0);
+        int iz = (int) Math.round(z0);
+        int ex = (int) Math.round(x0 + cell);
+        int ez = (int) Math.round(z0 + cell);
+
+        g.enableScissor(0, TOPBAR_H, width, height - BOTBAR_H);
+        g.fill(ix, iz, ex, iz + 2, 0xC0FFEA00);
+        g.fill(ix, ez - 2, ex, ez, 0xC0FFEA00);
+        g.fill(ix, iz, ix + 2, ez, 0xC0FFEA00);
+        g.fill(ex - 2, iz, ex, ez, 0xC0FFEA00);
+        g.disableScissor();
+    }
+
+    private void drawDebugOrigin(GuiGraphics g) {
+        double[] r = computeMapRect();
+        if (r[2] <= 0 || r[3] <= 0) return;
+        int cx = (int) Math.round(r[0] + r[2] / 2.0);
+        int cy = (int) Math.round(r[1] + r[3] / 2.0);
+        g.enableScissor(0, TOPBAR_H, width, height - BOTBAR_H);
+        g.fill(cx - 8, cy - 1, cx + 9, cy + 1, 0xFFFF3B3B);
+        g.fill(cx - 1, cy - 8, cx + 1, cy + 9, 0xFFFF3B3B);
+        g.disableScissor();
+    }
+
+    private void drawDebugTileCoords(GuiGraphics g, ChunkPos center) {
+        double[] r = computeMapRect();
+        if (r[2] <= 0 || r[3] <= 0) return;
+
+        double cell = tileRes * zoom;
+        if (cell < 32) return;
+
+        g.enableScissor(0, TOPBAR_H, width, height - BOTBAR_H);
+
+        int top = Math.max(TOPBAR_H, (int) Math.ceil(r[1]));
+        int bot = Math.min(height - BOTBAR_H, (int) Math.floor(r[1] + r[3]));
+        int left = Math.max(0, (int) Math.ceil(r[0]));
+        int right = Math.min(width, (int) Math.floor(r[0] + r[2]));
+
+        int startI = (int) Math.floor((left - r[0]) / cell);
+        int endI   = (int) Math.ceil((right - r[0]) / cell);
+        int startJ = (int) Math.floor((top - r[1]) / cell);
+        int endJ   = (int) Math.ceil((bot - r[1]) / cell);
+
+        int baseCX = center.x - radius;
+        int baseCZ = center.z - radius;
+
+        for (int i = startI; i <= endI; i++) {
+            for (int j = startJ; j <= endJ; j++) {
+                int x = (int) Math.round(r[0] + i * cell);
+                int y = (int) Math.round(r[1] + j * cell);
+                if (x < left || x >= right || y < top || y >= bot) continue;
+
+                int ccx = baseCX + i;
+                int ccz = baseCZ + j;
+                String s = ccx + "," + ccz;
+                g.fill(x + 1, y + 1, x + 1 + font.width(s) + 2, y + 11, 0xA0000000);
+                g.drawString(font, s, x + 2, y + 2, 0xFFFFEA00, false);
+            }
+        }
+
+        g.disableScissor();
+    }
+
+    private void drawDebugHighlight(GuiGraphics g, int mouseX, int mouseY) {
+        if (mouseX < 0 || mouseY < TOPBAR_H || mouseY > height - BOTBAR_H) return;
+        double[] r = computeMapRect();
+        if (r[2] <= 0 || r[3] <= 0) return;
+
+        double cell = tileRes * zoom;
+        if (cell <= 0) return;
+
+        int i = (int) Math.floor((mouseX - r[0]) / cell);
+        int j = (int) Math.floor((mouseY - r[1]) / cell);
+
+        int x  = (int) Math.round(r[0] + i * cell);
+        int y  = (int) Math.round(r[1] + j * cell);
+        int ex = (int) Math.round(x + cell);
+        int ey = (int) Math.round(y + cell);
+
+        g.enableScissor(0, TOPBAR_H, width, height - BOTBAR_H);
+        g.fill(x, y, ex, y + 1, 0xFFFFFFFF);
+        g.fill(x, ey - 1, ex, ey, 0xFFFFFFFF);
+        g.fill(x, y, x + 1, ey, 0xFFFFFFFF);
+        g.fill(ex - 1, y, ex, ey, 0xFFFFFFFF);
+        g.disableScissor();
+    }
+
+    private static String stripColor(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '§' && i + 1 < s.length()) { i++; continue; }
+            sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    // ==================== 纹理重建 ====================
+
     private void rebuildTexture(long version, ResourceKey<Level> dim) {
         LocalPlayer player = minecraft.player;
         if (player == null) return;
         ChunkPos center = new ChunkPos(player.blockPosition());
 
         int size = (radius * 2 + 1) * tileRes;
+
+        if (logger != null && logger.isEnabled(FileLogger.Level.DEBUG)) {
+            logger.debug("[UI] rebuildTexture dim=" + dim.identifier()
+                    + " center=" + center
+                    + " radius=" + radius
+                    + " tileRes=" + tileRes
+                    + " size=" + size
+                    + " version=" + version);
+        }
+        count("ui.texture.rebuild");
+
+        long t0 = System.nanoTime();
+        int drawnTiles = 0;
 
         NativeImage img = new NativeImage(NativeImage.Format.RGBA, size, size, true);
         boolean handedOff = false;
@@ -573,6 +846,7 @@ public class ChunkMapScreen extends Screen {
                 for (int dz = -radius; dz <= radius; dz++) {
                     int[] pixels = cache.get(dim, new ChunkPos(center.x + dx, center.z + dz));
                     if (pixels == null) continue;
+                    drawnTiles++;
                     int dstX = (dx + radius) * tileRes;
                     int dstZ = (dz + radius) * tileRes;
                     for (int i = 0; i < tileRes; i++) {
@@ -597,6 +871,12 @@ public class ChunkMapScreen extends Screen {
 
             texSize = size;
             lastVersion = version;
+
+            if (logger != null && logger.isEnabled(FileLogger.Level.DEBUG)) {
+                long ms = (System.nanoTime() - t0) / 1_000_000;
+                logger.debug("[UI] rebuildTexture 完成 tiles=" + drawnTiles
+                        + " 耗时=" + ms + "ms");
+            }
         } finally {
             if (!handedOff) img.close();
         }
@@ -610,6 +890,8 @@ public class ChunkMapScreen extends Screen {
         double newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
         if (Math.abs(newZoom - zoom) < 1e-6) return true;
 
+        logTrace("[UI] 缩放 " + zoom + " → " + newZoom);
+        count("ui.zoom.scroll");
         zoom = newZoom;
         zoomToastUntil = System.currentTimeMillis() + 900;
         return true;
@@ -619,6 +901,8 @@ public class ChunkMapScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent event, boolean bl) {
         for (Btn b : buttons) {
             if (b.contains(event.x(), event.y())) {
+                logDebug("[UI] 按钮点击: " + b.label);
+                count("ui.button." + b.label);
                 b.action.run();
                 return true;
             }
@@ -628,6 +912,7 @@ public class ChunkMapScreen extends Screen {
         }
         if (event.button() == 0) {
             dragging = true;
+            logTrace("[UI] 开始拖动 offset=(" + offsetX + "," + offsetZ + ")");
             return true;
         }
         return super.mouseClicked(event, bl);
@@ -645,21 +930,45 @@ public class ChunkMapScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
-        if (event.button() == 0) dragging = false;
+        if (event.button() == 0) {
+            if (dragging) logTrace("[UI] 结束拖动 offset=(" + offsetX + "," + offsetZ + ")");
+            dragging = false;
+        }
         return super.mouseReleased(event);
     }
 
+    // ==================== 键盘 ====================
     @Override
     public boolean keyPressed(KeyEvent e) {
-        if (e.key() == InputConstants.KEY_ESCAPE) { onClose(); return true; }
-        if (e.key() == InputConstants.KEY_E) { exportStitchedMap(); return true; }
-        if (e.key() == InputConstants.KEY_C) { offsetX = 0; offsetZ = 0; return true; }
+        if (e.key() == InputConstants.KEY_ESCAPE) {
+            logInfo("[UI] 按键 ESC → 关闭地图");
+            count("ui.key.esc");
+            onClose();
+            return true;
+        }
+        if (e.key() == InputConstants.KEY_E) {
+            logInfo("[UI] 按键 E → 导出");
+            count("ui.key.export");
+            exportStitchedMap();
+            return true;
+        }
+        if (e.key() == InputConstants.KEY_C) {
+            logInfo("[UI] 按键 C → 回中");
+            count("ui.key.center");
+            offsetX = 0;
+            offsetZ = 0;
+            return true;
+        }
         if (e.key() == InputConstants.KEY_Z) {
+            logInfo("[UI] 按键 Z → 复位缩放 1:1");
+            count("ui.key.zoom_reset");
             zoom = 1.0;
             zoomToastUntil = System.currentTimeMillis() + 900;
             return true;
         }
         if (e.key() == InputConstants.KEY_R) {
+            logInfo("[UI] 按键 R → 触发重载");
+            count("ui.key.reload");
             pendingReload = true;
             return true;
         }
@@ -672,6 +981,7 @@ public class ChunkMapScreen extends Screen {
         if (player == null || level == null) return;
 
         long t0 = System.currentTimeMillis();
+        logInfo("[UI] === 重载开始 ===");
 
         ChunkMapMod.reload();
 
@@ -683,7 +993,10 @@ public class ChunkMapScreen extends Screen {
         }
 
         var dispatcher = ChunkMapMod.getDispatcher();
-        if (dispatcher == null) return;
+        if (dispatcher == null) {
+            logInfo("[UI] dispatcher 为 null，重载中止");
+            return;
+        }
         dispatcher.getCache().clear();
 
         if (texture != null) {
@@ -706,15 +1019,22 @@ public class ChunkMapScreen extends Screen {
 
         long dt = System.currentTimeMillis() - t0;
         showExportMsg("重载中… 入队 " + count + " 区块 (" + dt + "ms)", true);
-        if (logger != null) {
-            logger.info("[UI] R 重载：" + count + " 区块入队，同步耗时=" + dt + "ms");
-        }
+        logInfo("[UI] === 重载完成，入队 " + count + " 区块，耗时 " + dt + "ms ===");
     }
 
+    // ==================== 导出 ====================
     private void exportStitchedMap() {
         ClientLevel level = minecraft.level;
-        if (level == null) { showExportMsg("未进入世界", false); return; }
-        if (exporting) { showExportMsg("导出进行中...", false); return; }
+        if (level == null) {
+            showExportMsg("未进入世界", false);
+            logInfo("[UI] 导出取消：未进入世界");
+            return;
+        }
+        if (exporting) {
+            showExportMsg("导出进行中...", false);
+            logInfo("[UI] 导出取消：已有导出进行中");
+            return;
+        }
 
         exporting = true;
         final Identifier dim = level.dimension().identifier();
@@ -722,7 +1042,8 @@ public class ChunkMapScreen extends Screen {
         final int res = currentTileRes();
         showExportMsg("正在导出...", false);
 
-        if (logger != null) logger.info("[UI] 开始导出 dim=" + dim + " dir=" + dir + " res=" + res);
+        logInfo("[UI] 导出开始 dim=" + dim + " dir=" + dir + " res=" + res);
+        count("ui.export.start");
 
         CompletableFuture.supplyAsync(() -> {
             try {
@@ -737,11 +1058,15 @@ public class ChunkMapScreen extends Screen {
                     Throwable cause = err.getCause() != null ? err.getCause() : err;
                     showExportMsg("导出失败: " + cause.getMessage(), false);
                     if (logger != null) logger.error("[UI] 导出异常", cause);
+                    count("ui.export.fail");
                 } else if (out == null) {
                     showExportMsg("没有可拼接的瓦片", false);
+                    logInfo("[UI] 导出结束：无瓦片");
+                    count("ui.export.empty");
                 } else {
                     showExportMsg("已导出: " + out.getFileName(), true);
-                    if (logger != null) logger.info("[UI] 导出完成 " + out.toAbsolutePath());
+                    logInfo("[UI] 导出完成 " + out.toAbsolutePath());
+                    count("ui.export.ok");
                 }
             });
         });
@@ -755,15 +1080,25 @@ public class ChunkMapScreen extends Screen {
     }
 
     @Override
-    public void onClose() { releaseTexture(); super.onClose(); }
+    public void onClose() {
+        logInfo("[UI] 关闭地图界面");
+        count("ui.map.close");
+        releaseTexture();
+        super.onClose();
+    }
 
     @Override
-    public void removed() { releaseTexture(); super.removed(); }
+    public void removed() {
+        logDebug("[UI] map removed()");
+        releaseTexture();
+        super.removed();
+    }
 
     private void releaseTexture() {
         if (texture != null) {
             minecraft.getTextureManager().release(TEXTURE_ID);
             texture = null;
+            logDebug("[UI] 释放地图纹理");
         }
     }
 

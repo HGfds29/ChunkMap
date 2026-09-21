@@ -1,5 +1,7 @@
 package com.geek.chunkmap.tile;
 
+import com.geek.chunkmap.ChunkMapMod;
+import com.geek.chunkmap.util.FileLogger;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -9,38 +11,37 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-/**
- * 瓦片文件目录组织。
- * 结构：<outputDir>/<dim_namespace>/<dim_path>/<chunkX>_<chunkZ>.png
- * 例：chunkmap-output/minecraft/overworld/15_-23.png
- *     chunkmap-output/minecraft/the_nether/0_0.png
- */
 public class TileStorage {
     private final Path baseDir;
 
     public TileStorage(String outputDir) {
         this.baseDir = Paths.get(outputDir);
+        FileLogger lg = ChunkMapMod.getLogger();
+        if (lg != null) lg.debug("[Storage] 创建 baseDir=" + baseDir.toAbsolutePath());
     }
 
-    /** 计算瓦片输出路径。 */
     public Path tilePath(ResourceKey<Level> dimension, ChunkPos pos) {
         String dir = dimensionDirName(dimension);
         return baseDir.resolve(dir).resolve(pos.x + "_" + pos.z + ".png");
     }
 
-    /** 维度目录名：namespace/path（冒号转斜杠，安全文件名）。 */
     private String dimensionDirName(ResourceKey<Level> dim) {
         var loc = dim.identifier();
         return loc.getNamespace() + "/" + loc.getPath();
     }
 
-    /** 删除瓦片（用于 unload 删除场景）。 */
     public void deleteTile(ResourceKey<Level> dimension, ChunkPos pos) {
         Path p = tilePath(dimension, pos);
+        FileLogger lg = ChunkMapMod.getLogger();
         try {
-            Files.deleteIfExists(p);
-        } catch (IOException ignored) {
-            // 删除失败不影响主流程
+            boolean deleted = Files.deleteIfExists(p);
+            if (lg != null) {
+                lg.count("storage.delete");
+                if (lg.isEnabled(FileLogger.Level.DEBUG))
+                    lg.debug("[Storage] delete " + p + " ok=" + deleted);
+            }
+        } catch (IOException e) {
+            if (lg != null) lg.warn("[Storage] 删除失败 " + p + ": " + e.getMessage());
         }
     }
 

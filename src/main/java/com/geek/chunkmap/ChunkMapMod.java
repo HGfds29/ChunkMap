@@ -1,6 +1,7 @@
 package com.geek.chunkmap;
 
 import com.geek.chunkmap.config.ConfigLoader;
+import com.geek.chunkmap.config.DevToken;
 import com.geek.chunkmap.config.TileMapConfig;
 import com.geek.chunkmap.event.ClientEventHandler;
 import com.geek.chunkmap.render.BlockColorPalette;
@@ -13,7 +14,7 @@ import net.fabricmc.api.ClientModInitializer;
 
 public class ChunkMapMod implements ClientModInitializer {
     public static final String MOD_ID = "chunkmap";
-    public static final String VERSION = "1.0.0.0-beta.4+1.21.11";
+    public static final String VERSION = "1.0.0.0-beta.5-Preview.1+1.21.11";
 
     public static final String GITHUB_REPO = "HGfds29/ChunkMap";
     public static final String GITHUB_URL = "https://github.com/" + GITHUB_REPO;
@@ -32,52 +33,106 @@ public class ChunkMapMod implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         long t0 = System.currentTimeMillis();
+        FileLogger lg;
 
-        config = ConfigLoader.load();
+        try {
+            config = ConfigLoader.load();
 
-        logger = new FileLogger();
-        logger.init();
-        logger.setLevel(FileLogger.levelFromProperty("chunkmap.logLevel", FileLogger.Level.INFO));
+            lg = new FileLogger();
+            lg.init();
+            lg.setLevel(FileLogger.levelFromProperty("chunkmap.logLevel", FileLogger.Level.INFO));
+            logger = lg;
 
-        logger.cleanOldLogs(config.logRetentionDays());
-        logger.info("===== ChunkMap 启动 =====");
-        logger.info("版本 " + VERSION);
-        logger.info("配置: " + config);
-        logger.info("日志文件: " + logger.getCurrentLogFile().toAbsolutePath());
-        logger.info("======================");
+            lg.info("========================================");
+            lg.info(" ChunkMap 启动");
+            lg.info(" 版本      : " + VERSION);
+            lg.info(" 仓库      : " + GITHUB_REPO);
+            lg.info(" Java      : " + System.getProperty("java.version"));
+            lg.info(" OS        : " + System.getProperty("os.name") + " " + System.getProperty("os.arch"));
+            lg.info(" 用户目录  : " + System.getProperty("user.dir"));
+            lg.info(" 日志级别  : " + lg.getLevel());
+            lg.info(" 配置文件  : " + ConfigLoader.configPath().toAbsolutePath());
+            lg.info(" 日志文件  : " + lg.getCurrentLogFile().toAbsolutePath());
+            lg.info("----------------------------------------");
+            lg.info(" 配置内容  : " + config);
+            lg.info("========================================");
 
-        palette = BlockColorPalette.create(config.colorMode());
-        renderer = new ChunkTopDownRenderer(config.tileResolution(), config.shadeByHeight());
-        snapshotter = new ChunkSnapshotter(palette);
-        snapshotter.setLogger(logger);
-        storage = new TileStorage(config.outputDir());
+            lg.cleanOldLogs(config.logRetentionDays());
 
-        dispatcher = new RenderDispatcher(config, logger, renderer, snapshotter);
-        dispatcher.start();
+            try (var s = lg.scope("init.palette")) {
+                palette = BlockColorPalette.create(config.colorMode());
+                lg.info("[Init] palette 颜色模式=" + config.colorMode()
+                        + " class=" + palette.getClass().getSimpleName());
+            }
+            try (var s = lg.scope("init.renderer")) {
+                renderer = new ChunkTopDownRenderer(config.tileResolution(), config.shadeByHeight());
+                lg.info("[Init] renderer res=" + config.tileResolution()
+                        + " shadeByHeight=" + config.shadeByHeight());
+            }
+            try (var s = lg.scope("init.snapshotter")) {
+                snapshotter = new ChunkSnapshotter(palette);
+                snapshotter.setLogger(lg);
+            }
+            try (var s = lg.scope("init.storage")) {
+                storage = new TileStorage(config.outputDir());
+                lg.info("[Init] storage baseDir=" + storage.getBaseDir().toAbsolutePath());
+            }
+            try (var s = lg.scope("init.dispatcher")) {
+                dispatcher = new RenderDispatcher(config, lg, renderer, snapshotter);
+                dispatcher.start();
+            }
+            try (var s = lg.scope("init.events")) {
+                ClientEventHandler.register();
+            }
 
-        ClientEventHandler.register();
-        logger.info("===== ChunkMap 初始化完成，用时 " + (System.currentTimeMillis() - t0) + "ms =====");
+            lg.info("===== ChunkMap 初始化完成，用时 "
+                    + (System.currentTimeMillis() - t0) + "ms =====");
+        } catch (Throwable t) {
+            if (logger != null) logger.error("[Init] 致命异常", t);
+            else t.printStackTrace();
+            throw t;
+        }
     }
 
     public static void reload() {
         if (logger == null) return;
 
+        FileLogger lg = logger;
+        lg.info("========================================");
+        lg.info(" ChunkMap 重载配置");
+        lg.info("----------------------------------------");
+
         TileMapConfig old = config;
-        config = ConfigLoader.load();
+        try (var s = lg.scope("reload.config.load")) {
+            config = ConfigLoader.load();
+        }
 
-        logger.info("===== ChunkMap 重载配置 =====");
-        logger.info("旧: " + old);
-        logger.info("新: " + config);
-        logger.info("shadeByHeight: " + (old == null ? "?" : old.shadeByHeight())
-                + " → " + config.shadeByHeight());
-        logger.info("============================");
+        lg.info(" 旧配置 : " + old);
+        lg.info(" 新配置 : " + config);
+        if (old != null) {
+            lg.info(" tileResolution : " + old.tileResolution() + " → " + config.tileResolution());
+            lg.info(" outputDir      : " + old.outputDir() + " → " + config.outputDir());
+            lg.info(" colorMode      : " + old.colorMode() + " → " + config.colorMode());
+            lg.info(" shadeByHeight  : " + old.shadeByHeight() + " → " + config.shadeByHeight());
+            lg.info(" uiAnimation    : " + old.uiAnimation() + " → " + config.uiAnimation());
+            lg.info(" deleteOnUnload : " + old.deleteOnUnload() + " → " + config.deleteOnUnload());
+            lg.info(" renderThreads  : " + old.renderThreads() + " → " + config.renderThreads());
+            lg.info(" logRetention   : " + old.logRetentionDays() + " → " + config.logRetentionDays());
+        }
+        lg.info("----------------------------------------");
 
-        logger.cleanOldLogs(config.logRetentionDays());
+        lg.cleanOldLogs(config.logRetentionDays());
 
-        palette = BlockColorPalette.create(config.colorMode());
-        renderer = new ChunkTopDownRenderer(config.tileResolution(), config.shadeByHeight());
-        snapshotter = new ChunkSnapshotter(palette);
-        snapshotter.setLogger(logger);
+        try (var s = lg.scope("reload.palette")) {
+            palette = BlockColorPalette.create(config.colorMode());
+        }
+        try (var s = lg.scope("reload.renderer")) {
+            renderer = new ChunkTopDownRenderer(config.tileResolution(), config.shadeByHeight());
+        }
+        try (var s = lg.scope("reload.snapshotter")) {
+            snapshotter = new ChunkSnapshotter(palette);
+            snapshotter.setLogger(lg);
+        }
 
         if (dispatcher != null) {
             dispatcher.setRenderer(renderer);
@@ -87,18 +142,36 @@ public class ChunkMapMod implements ClientModInitializer {
 
         if (old == null || !old.outputDir().equals(config.outputDir())) {
             storage = new TileStorage(config.outputDir());
+            lg.info("[Reload] storage 重建 → " + storage.getBaseDir().toAbsolutePath());
         }
+
+        lg.info("===== 重载完成 =====");
+        lg.info("========================================");
     }
 
     /**
-     * 获取当前生效的 GitHub Token。
-     * 只从配置中读取；未配置时返回空字符串。
-     * （不再有硬编码的兜底 token，避免源码泄露风险。）
+     * 读取优先级：
+     *   1. config/chunkmap.json 的 githubToken
+     *   2. DevToken.VALUE
      */
     public static String getEffectiveToken() {
-        if (config != null && config.githubToken() != null && !config.githubToken().isBlank()) {
+        if (config != null
+                && config.githubToken() != null
+                && !config.githubToken().isBlank()) {
+            if (logger != null && logger.isEnabled(FileLogger.Level.DEBUG))
+                logger.debug("[Token] 使用 config 中的 token");
             return config.githubToken().trim();
         }
+        try {
+            String dev = DevToken.VALUE;
+            if (dev != null && !dev.isBlank()) {
+                if (logger != null && logger.isEnabled(FileLogger.Level.DEBUG))
+                    logger.debug("[Token] 使用 DevToken.VALUE");
+                return dev.trim();
+            }
+        } catch (Throwable ignored) {}
+        if (logger != null && logger.isEnabled(FileLogger.Level.DEBUG))
+            logger.debug("[Token] 无可用 token");
         return "";
     }
 

@@ -21,9 +21,13 @@ public final class TilePngWriter {
 
         FileLogger lg = ChunkMapMod.getLogger();
         if (lg != null) {
-            lg.trace("[Png] 写入 " + output.getFileName()
-                    + " " + width + "x" + height
-                    + " 耗时=" + ((System.nanoTime() - t0) / 1_000_000) + "ms");
+            lg.count("png.write");
+            long ms = (System.nanoTime() - t0) / 1_000_000;
+            if (lg.isEnabled(FileLogger.Level.DEBUG)) {
+                lg.debug("[Png] 写入 " + output.getFileName()
+                        + " " + width + "x" + height
+                        + " 耗时=" + ms + "ms");
+            }
         }
     }
 }

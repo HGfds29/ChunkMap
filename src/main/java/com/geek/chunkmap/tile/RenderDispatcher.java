@@ -38,6 +38,7 @@ public class RenderDispatcher {
     private final AtomicLong enqueuedCount = new AtomicLong();
     private final AtomicLong renderedCount = new AtomicLong();
     private final AtomicLong failedCount = new AtomicLong();
+    private final AtomicLong skippedCount = new AtomicLong();
 
     private final AtomicLong workerGen = new AtomicLong();
 
@@ -59,6 +60,7 @@ public class RenderDispatcher {
             t.setDaemon(true);
             return t;
         });
+        logger.debug("[Dispatcher] 构造完成");
     }
 
     public void updateConfig(TileMapConfig newConfig) {
@@ -66,16 +68,18 @@ public class RenderDispatcher {
         int oldThreads = this.config.renderThreads();
         this.config = newConfig;
 
+        logger.info("[Dispatcher] updateConfig oldThreads=" + oldThreads
+                + " newThreads=" + newConfig.renderThreads()
+                + " outputChanged=" + outputChanged);
+
         if (outputChanged) {
             this.storage = new TileStorage(newConfig.outputDir());
-            logger.info("[Dispatcher] outputDir 变化，重建 storage → " + newConfig.outputDir());
+            logger.info("[Dispatcher] outputDir 变化 → " + newConfig.outputDir());
         }
 
         if (running && newConfig.renderThreads() != oldThreads) {
             restartWorkers(newConfig.renderThreads());
         }
-
-        logger.info("[Dispatcher] config 已更新: " + newConfig);
     }
 
     public TileMapConfig getConfig() { return config; }
@@ -83,35 +87,61 @@ public class RenderDispatcher {
 
     public void setRenderer(ChunkTopDownRenderer r) {
         this.renderer = r;
-        logger.info("[Dispatcher] renderer 已替换");
+        logger.info("[Dispatcher] renderer 替换 class=" + (r == null ? "null" : r.getClass().getSimpleName()));
     }
-
     public void setSnapshotter(ChunkSnapshotter s) {
         this.snapshotter = s;
-        logger.info("[Dispatcher] snapshotter 已替换");
+        logger.info("[Dispatcher] snapshotter 替换 class=" + (s == null ? "null" : s.getClass().getSimpleName()));
     }
 
     public void enqueueRender(ChunkPos pos) {
-        if (pos == null || !running) return;
+        if (pos == null) return;
+        if (!running) {
+            logger.count("dispatch.enqueue.rejected.not_running");
+            return;
+        }
 
         Minecraft mc = Minecraft.getInstance();
         if (!mc.isSameThread()) {
+            logger.count("dispatch.enqueue.hop_to_main");
             mc.execute(() -> enqueueRender(pos));
             return;
         }
 
         ClientLevel level = mc.level;
-        if (level == null) return;
-        if (!pending.add(pos)) return;
-
-        ChunkSnapshot snap = snapshotter.snapshot(level, pos);
-        if (snap == null) {
-            pending.remove(pos);
+        if (level == null) {
+            logger.count("dispatch.enqueue.rejected.no_level");
+            return;
+        }
+        if (!pending.add(pos)) {
+            logger.count("dispatch.enqueue.rejected.dup");
+            if (logger.isEnabled(FileLogger.Level.TRACE))
+                logger.trace("[Dispatch] dup skip " + pos);
             return;
         }
 
-        queue.offer(snap);
-        enqueuedCount.incrementAndGet();
+        ChunkSnapshot snap;
+        try (var s = logger.scope("dispatch.snapshot")) {
+            snap = snapshotter.snapshot(level, pos);
+        }
+        if (snap == null) {
+            pending.remove(pos);
+            skippedCount.incrementAndGet();
+            logger.count("dispatch.enqueue.rejected.snapshot_null");
+            if (logger.isEnabled(FileLogger.Level.TRACE))
+                logger.trace("[Dispatch] snapshot null " + pos);
+            return;
+        }
+
+        boolean offered = queue.offer(snap);
+        if (offered) {
+            enqueuedCount.incrementAndGet();
+            logger.count("dispatch.enqueued");
+            if (logger.isEnabled(FileLogger.Level.TRACE))
+                logger.trace("[Dispatch] enqueued " + pos + " queue=" + queue.size());
+        } else {
+            logger.count("dispatch.enqueue.rejected.offer_failed");
+        }
     }
 
     private ExecutorService buildWorkerPool(int n) {
@@ -133,9 +163,10 @@ public class RenderDispatcher {
         long gen = workerGen.incrementAndGet();
         workers = buildWorkerPool(n);
         for (int i = 0; i < n; i++) {
-            workers.submit(() -> workerLoop(gen));
+            final int id = i;
+            workers.submit(() -> workerLoop(gen, id));
         }
-        logger.info("[Dispatcher] 启动, 工作线程数=" + n);
+        logger.info("[Dispatcher] 启动，工作线程数=" + n + " gen=" + gen);
     }
 
     private void restartWorkers(int n) {
@@ -143,13 +174,16 @@ public class RenderDispatcher {
         long gen = workerGen.incrementAndGet();
         this.workers = buildWorkerPool(n);
         for (int i = 0; i < n; i++) {
-            workers.submit(() -> workerLoop(gen));
+            final int id = i;
+            workers.submit(() -> workerLoop(gen, id));
         }
         if (old != null) old.shutdown();
-        logger.info("[Dispatcher] 工作线程数 → " + n);
+        logger.info("[Dispatcher] 工作线程数 → " + n + " gen=" + gen);
     }
 
     public void shutdown() {
+        logger.info("[Dispatcher] shutdown 开始 running=" + running
+                + " queue=" + queue.size() + " pending=" + pending.size());
         running = false;
         if (workers != null) {
             workers.shutdown();
@@ -169,37 +203,55 @@ public class RenderDispatcher {
                 Thread.currentThread().interrupt();
             }
         }
-        logger.info("[Dispatcher] 已关闭");
+        logger.info("[Dispatcher] 关闭完成 enqueued=" + enqueuedCount.get()
+                + " rendered=" + renderedCount.get()
+                + " failed=" + failedCount.get()
+                + " skipped=" + skippedCount.get());
     }
 
     public void setCurrentDimension(ResourceKey<Level> dim) {
         if (Objects.equals(this.currentDimension, dim)) return;
+        ResourceKey<Level> old = this.currentDimension;
         this.currentDimension = dim;
-        logger.info("[Dispatcher] 当前维度切换为 " + (dim == null ? "null" : dim.identifier()));
+        logger.info("[Dispatcher] 维度 " + (old == null ? "null" : old.identifier())
+                + " → " + (dim == null ? "null" : dim.identifier()));
     }
 
     public ResourceKey<Level> getCurrentDimension() { return currentDimension; }
 
-    private void workerLoop(long gen) {
+    private void workerLoop(long gen, int workerId) {
+        if (logger.isEnabled(FileLogger.Level.DEBUG))
+            logger.debug("[Worker-" + workerId + "] 启动 gen=" + gen);
         while (running && gen == workerGen.get()) {
             try {
                 ChunkSnapshot snap = queue.poll(100, TimeUnit.MILLISECONDS);
                 if (snap == null) continue;
                 pending.remove(snap.pos());
+                if (logger.isEnabled(FileLogger.Level.TRACE)) {
+                    logger.trace("[Worker-" + workerId + "] 处理 " + snap.pos()
+                            + " 剩余队列=" + queue.size());
+                }
                 processJob(snap);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                logger.debug("[Worker-" + workerId + "] 中断退出");
                 return;
             } catch (Throwable t) {
-                logger.error("[Worker] 异常: " + t.getMessage(), t);
+                logger.error("[Worker-" + workerId + "] 异常", t);
             }
         }
+        if (logger.isEnabled(FileLogger.Level.DEBUG))
+            logger.debug("[Worker-" + workerId + "] 退出 gen=" + gen);
     }
 
     private void processJob(ChunkSnapshot snap) {
+        long t0 = System.nanoTime();
         try {
             ChunkTopDownRenderer r = this.renderer;
-            if (r == null) return;
+            if (r == null) {
+                logger.warn("[Render] renderer 为 null，跳过 " + snap.pos());
+                return;
+            }
             int[] pixels = r.renderChunk(snap);
             cache.put(snap.dim(), snap.pos(), pixels);
 
@@ -213,22 +265,23 @@ public class RenderDispatcher {
                 try {
                     TilePngWriter.write(px, res, res, out);
                 } catch (IOException e) {
-                    // 不再静默吞掉，记录到日志
-                    if (lg != null) {
-                        lg.error("[IO] 写入瓦片失败 " + pos + " → " + out
-                                + ": " + e.getMessage(), e);
-                    }
+                    lg.error("[IO] 写入瓦片失败 " + pos + " → " + out
+                            + ": " + e.getMessage(), e);
                 } catch (Throwable t) {
-                    if (lg != null) {
-                        lg.error("[IO] 写入瓦片异常 " + pos + ": " + t.getMessage(), t);
-                    }
+                    lg.error("[IO] 写入瓦片异常 " + pos, t);
                 }
             });
 
             renderedCount.incrementAndGet();
+            logger.count("render.done");
+            if (logger.isEnabled(FileLogger.Level.DEBUG)) {
+                long ms = (System.nanoTime() - t0) / 1_000_000;
+                logger.debug("[Render] " + snap.pos() + " 完成 " + ms + "ms");
+            }
         } catch (Throwable t) {
             failedCount.incrementAndGet();
-            logger.error("[Render] 失败 " + snap.pos() + ": " + t.getMessage(), t);
+            logger.count("render.fail");
+            logger.error("[Render] 失败 " + snap.pos(), t);
         }
     }
 

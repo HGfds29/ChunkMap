@@ -19,6 +19,9 @@ public class ChunkTopDownRenderer {
         this.shadeByHeight = shadeByHeight;
     }
 
+    public int getResolution() { return resolution; }
+    public boolean isShadeByHeight() { return shadeByHeight; }
+
     public int[] renderChunk(ChunkSnapshot snapshot) {
         int res = resolution;
         int scale = res / 16;
@@ -39,7 +42,6 @@ public class ChunkTopDownRenderer {
 
                 int rgb = baseRgb;
 
-                // 只有 shadeByHeight=true 时才做任何明暗
                 if (shadeByHeight) {
                     int yE = sampleY(ys, x + SAMPLE_RADIUS, z, y);
                     int yW = sampleY(ys, x - SAMPLE_RADIUS, z, y);
