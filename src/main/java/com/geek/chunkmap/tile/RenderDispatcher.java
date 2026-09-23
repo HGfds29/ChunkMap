@@ -252,10 +252,13 @@ public class RenderDispatcher {
                 logger.warn("[Render] renderer 为 null，跳过 " + snap.pos());
                 return;
             }
-            int[] pixels = r.renderChunk(snap);
-            cache.put(snap.dim(), snap.pos(), pixels);
 
-            final int res = config.tileResolution();
+            // ★ 分辨率以 renderer 为准 —— 这样 pixels.length 一定等于 res*res，
+            //   缓存和 PNG 使用同一个 res，避免 config 与 renderer 短暂不一致导致越界。
+            final int res = r.getResolution();
+            final int[] pixels = r.renderChunk(snap);
+            cache.put(snap.dim(), snap.pos(), res, pixels);
+
             final TileStorage st = this.storage;
             final Path out = st.tilePath(snap.dim(), snap.pos());
             final int[] px = pixels;

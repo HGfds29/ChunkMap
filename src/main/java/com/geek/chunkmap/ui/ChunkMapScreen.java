@@ -273,7 +273,7 @@ public class ChunkMapScreen extends Screen {
         return false;
     }
 
-        @Override
+    @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
         if (pendingReload) {
             pendingReload = false;
@@ -838,14 +838,32 @@ public class ChunkMapScreen extends Screen {
 
         long t0 = System.nanoTime();
         int drawnTiles = 0;
+        int skippedTiles = 0;
 
         NativeImage img = new NativeImage(NativeImage.Format.RGBA, size, size, true);
         boolean handedOff = false;
         try {
+            final int expectedLen = tileRes * tileRes;
+
             for (int dx = -radius; dx <= radius; dx++) {
                 for (int dz = -radius; dz <= radius; dz++) {
-                    int[] pixels = cache.get(dim, new ChunkPos(center.x + dx, center.z + dz));
+                    ChunkPos cp = new ChunkPos(center.x + dx, center.z + dz);
+
+                    // ★ 传 tileRes 作为期望分辨率 —— 缓存会自动拒绝尺寸不匹配的瓦片。
+                    int[] pixels = cache.get(dim, cp, tileRes);
                     if (pixels == null) continue;
+
+                    // ★ 双保险：即使缓存实现变了，也在这里再校验一次长度，
+                    //   避免出现 j*tileRes+i 越界（Index 256 out of bounds）。
+                    if (pixels.length != expectedLen) {
+                        skippedTiles++;
+                        if (logger != null && logger.isEnabled(FileLogger.Level.DEBUG)) {
+                            logger.debug("[UI] 跳过分辨率不匹配的瓦片 " + cp
+                                    + " len=" + pixels.length + " 期望=" + expectedLen);
+                        }
+                        continue;
+                    }
+
                     drawnTiles++;
                     int dstX = (dx + radius) * tileRes;
                     int dstZ = (dz + radius) * tileRes;
@@ -875,6 +893,7 @@ public class ChunkMapScreen extends Screen {
             if (logger != null && logger.isEnabled(FileLogger.Level.DEBUG)) {
                 long ms = (System.nanoTime() - t0) / 1_000_000;
                 logger.debug("[UI] rebuildTexture 完成 tiles=" + drawnTiles
+                        + " skipped=" + skippedTiles
                         + " 耗时=" + ms + "ms");
             }
         } finally {

@@ -138,6 +138,19 @@ public class ChunkMapMod implements ClientModInitializer {
             dispatcher.setRenderer(renderer);
             dispatcher.setSnapshotter(snapshotter);
             dispatcher.updateConfig(config);
+
+            // ★ tileResolution 变了 → 旧缓存里的瓦片尺寸与新 tileRes 不匹配，
+            //   必须清掉，否则重建纹理时会越界读取（Index 256 out of bounds）。
+            //   正常情况下 TileMapCache 也会按分辨率拒绝不匹配的瓦片，
+            //   这里主动清空是为了让 UI 立刻进入"等待新瓦片渲染"的状态。
+            boolean resChanged = (old == null) || (old.tileResolution() != config.tileResolution());
+            if (resChanged) {
+                dispatcher.getCache().clear();
+                lg.info("[Reload] tileResolution 改变 ("
+                        + (old == null ? "?" : old.tileResolution())
+                        + " → " + config.tileResolution()
+                        + ")，已清空瓦片缓存");
+            }
         }
 
         if (old == null || !old.outputDir().equals(config.outputDir())) {

@@ -115,12 +115,23 @@ public class LogViewerScreen extends Screen {
                     try { lv = FileLogger.Level.valueOf(m.group(2)); }
                     catch (Throwable t) { lv = FileLogger.Level.INFO; }
                     last = lv;
-                    lines.add(new LogEntry(lv, m.group(1), m.group(3), m.group(4), false));
+
+                    String body = m.group(4);
+                    int baseColor = colorOf(lv, false);
+                    List<LogHighlighter.Span> spans =
+                            LogHighlighter.highlight(body, baseColor);
+                    lines.add(new LogEntry(lv, m.group(1), m.group(3),
+                            body, false, spans));
                 } else {
-                    lines.add(new LogEntry(last, null, null, line, true));
+                    int baseColor = colorOf(last, true);
+                    List<LogHighlighter.Span> spans =
+                            LogHighlighter.highlight(line, baseColor);
+                    lines.add(new LogEntry(last, null, null,
+                            line, true, spans));
                 }
             }
-            status = "共 " + raw.size() + " 行 · 显示最后 " + lines.size() + " 行";
+            status = "共 " + raw.size() + " 行 · 显示最后 " + lines.size()
+                    + " 行 · 自动上色";
             autoScroll = true;
         } catch (IOException e) {
             status = "读取失败: " + e.getMessage();
@@ -182,9 +193,7 @@ public class LogViewerScreen extends Screen {
         int y = areaTop;
         for (int i = scroll; i < lines.size(); i++) {
             if (y + LINE_H > areaBot) break;
-            LogEntry e = lines.get(i);
-            int color = colorOf(e.level(), e.continuation());
-            g.drawString(font, formatEntry(e), areaLeft + 2, y, color, false);
+            drawEntry(g, lines.get(i), areaLeft + 2, y);
             y += LINE_H;
         }
         g.disableScissor();
@@ -200,6 +209,30 @@ public class LogViewerScreen extends Screen {
 
         drawTopBar(g, mouseX, mouseY);
         drawBottomBar(g);
+    }
+
+    // ==================== 单行渲染（自动上色） ====================
+
+    private void drawEntry(GuiGraphics g, LogEntry e, int x, int y) {
+        if (e.continuation()) {
+            int cx = x;
+            for (LogHighlighter.Span s : e.spans()) {
+                g.drawString(font, s.text(), cx, y, s.color(), false);
+                cx += font.width(s.text());
+            }
+            return;
+        }
+
+        // 前缀：[time] [LEVEL] [thread]
+        String prefix = "[" + e.time() + "] [" + e.level() + "] [" + e.thread() + "] ";
+        int prefixColor = colorOf(e.level(), false);
+        g.drawString(font, prefix, x, y, prefixColor, false);
+
+        int cx = x + font.width(prefix);
+        for (LogHighlighter.Span s : e.spans()) {
+            g.drawString(font, s.text(), cx, y, s.color(), false);
+            cx += font.width(s.text());
+        }
     }
 
     private void drawTopBar(GuiGraphics g, int mouseX, int mouseY) {
@@ -335,7 +368,8 @@ public class LogViewerScreen extends Screen {
     }
 
     private record LogEntry(FileLogger.Level level, String time, String thread,
-                            String text, boolean continuation) {}
+                            String text, boolean continuation,
+                            List<LogHighlighter.Span> spans) {}
 
     private static class Btn {
         final int x, y, w, h;
